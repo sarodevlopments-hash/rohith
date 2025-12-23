@@ -15,6 +15,7 @@ import '../services/listing_validator.dart';
 import '../services/seller_profile_service.dart';
 import 'package:hive/hive.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class AddListingScreen extends StatefulWidget {
   const AddListingScreen({super.key});
@@ -56,7 +57,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
   SellerProfile? sellerProfile;
   Listing? selectedPreviousListing;
 
-  final String sellerId = '101'; // TODO: Get from auth
+  String? get sellerId => FirebaseAuth.instance.currentUser?.uid;
 
   @override
   void initState() {
@@ -65,19 +66,31 @@ class _AddListingScreenState extends State<AddListingScreen> {
   }
 
   Future<void> _loadSellerProfile() async {
-    final hasProfile = await SellerProfileService.hasProfile(sellerId);
+    final currentSellerId = sellerId;
+    if (currentSellerId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please log in to continue')),
+        );
+      }
+      return;
+    }
+    final hasProfile = await SellerProfileService.hasProfile(currentSellerId);
     if (!hasProfile) {
       setState(() {
         isFirstTimeSeller = true;
         showSellerProfileForm = true;
       });
     } else {
-      final profile = await SellerProfileService.getProfile(sellerId);
+      final profile = await SellerProfileService.getProfile(currentSellerId);
       setState(() {
         sellerProfile = profile;
         if (profile != null) {
           sellerNameController.text = profile.sellerName;
-          sellerFssaiController.text = profile.fssaiLicense;
+          // Only load FSSAI if it was for cooked food
+          if (profile.defaultFoodType == SellType.cookedFood) {
+            sellerFssaiController.text = profile.fssaiLicense;
+          }
           selectedCookedFoodSource = profile.cookedFoodSource;
           if (profile.defaultFoodType != null) {
             selectedType = profile.defaultFoodType!;
@@ -192,19 +205,39 @@ class _AddListingScreenState extends State<AddListingScreen> {
   }
 
   Future<void> _saveSellerProfile() async {
-    if (sellerNameController.text.isEmpty || sellerFssaiController.text.isEmpty) {
+    final currentSellerId = sellerId;
+    if (currentSellerId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please log in to continue')),
+        );
+      }
+      return;
+    }
+
+    if (sellerNameController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill all seller profile fields')),
+        const SnackBar(content: Text('Please fill seller name')),
+      );
+      return;
+    }
+
+    // FSSAI is only required for cooked food
+    if (selectedType == SellType.cookedFood && sellerFssaiController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('FSSAI license is required for cooked food')),
       );
       return;
     }
 
     final profile = SellerProfile(
       sellerName: sellerNameController.text.trim(),
-      fssaiLicense: sellerFssaiController.text.trim(),
+      fssaiLicense: selectedType == SellType.cookedFood 
+          ? sellerFssaiController.text.trim()
+          : '', // Empty for non-cooked food items
       cookedFoodSource: selectedCookedFoodSource,
       defaultFoodType: selectedType,
-      sellerId: sellerId,
+      sellerId: currentSellerId,
     );
 
     await SellerProfileService.saveProfile(profile);
@@ -222,7 +255,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
     }
   }
 
-  void _selectPreviousListing(Listing listing) {
+  Future<void> _selectPreviousListing(Listing listing) async {
     setState(() {
       selectedPreviousListing = listing;
       nameController.text = listing.name;
@@ -233,19 +266,65 @@ class _AddListingScreenState extends State<AddListingScreen> {
       selectedCategory = listing.category;
       selectedCookedFoodSource = listing.cookedFoodSource;
       selectedMeasurementUnit = listing.measurementUnit;
-      preparedAt = listing.preparedAt;
-      expiryDate = listing.expiryDate;
+      // Don't auto-fill dates - seller needs to set them manually
+      preparedAt = null;
+      expiryDate = null;
+      
+      // Load image properly for both web and mobile
       if (listing.imagePath != null) {
         productImagePath = listing.imagePath;
-        productImage = File(listing.imagePath!);
+        if (kIsWeb) {
+          // For web, we need to try loading the image
+          // The path might be a blob URL or file path
+          _loadImageForWeb(listing.imagePath!);
+        } else {
+          // For mobile, check if file exists
+          final file = File(listing.imagePath!);
+          if (file.existsSync()) {
+            productImage = file;
+          } else {
+            productImagePath = null;
+            productImage = null;
+          }
+        }
+      } else {
+        productImagePath = null;
+        productImage = null;
+        productImageBytes = null;
       }
     });
   }
 
+  Future<void> _loadImageForWeb(String imagePath) async {
+    try {
+      // Try to load as XFile for web
+      final XFile file = XFile(imagePath);
+      final Uint8List bytes = await file.readAsBytes();
+      setState(() {
+        productImageBytes = bytes;
+      });
+    } catch (e) {
+      // If loading fails, clear the image so user can re-upload
+      setState(() {
+        productImagePath = null;
+        productImageBytes = null;
+      });
+    }
+  }
+
   Future<void> _showPreviousListingsDialog() async {
+    final currentSellerId = sellerId;
+    if (currentSellerId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please log in to view previous listings')),
+        );
+      }
+      return;
+    }
     final box = Hive.box<Listing>('listingBox');
     final previousListings = box.values
-        .where((l) => l.sellerId == sellerId)
+        .where((l) => l.sellerId == currentSellerId)
         .toSet()
         .toList();
 
@@ -271,14 +350,20 @@ class _AddListingScreenState extends State<AddListingScreen> {
             itemBuilder: (context, index) {
               final listing = previousListings[index];
               return ListTile(
-                leading: listing.imagePath != null && File(listing.imagePath!).existsSync()
-                    ? Image.file(File(listing.imagePath!), width: 50, height: 50, fit: BoxFit.cover)
+                leading: listing.imagePath != null
+                    ? (kIsWeb
+                        ? const Icon(Icons.fastfood) // On web, show icon (image loading is complex)
+                        : File(listing.imagePath!).existsSync()
+                            ? Image.file(File(listing.imagePath!), width: 50, height: 50, fit: BoxFit.cover)
+                            : const Icon(Icons.fastfood))
                     : const Icon(Icons.fastfood),
                 title: Text(listing.name),
                 subtitle: Text('₹${listing.price} - ${listing.type.name}'),
-                onTap: () {
-                  _selectPreviousListing(listing);
-                  Navigator.pop(context);
+                onTap: () async {
+                  await _selectPreviousListing(listing);
+                  if (mounted) {
+                    Navigator.pop(context);
+                  }
                 },
               );
             },
@@ -307,6 +392,16 @@ class _AddListingScreenState extends State<AddListingScreen> {
       return;
     }
 
+    final currentSellerId = sellerId;
+    if (currentSellerId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please log in to post listings')),
+        );
+      }
+      return;
+    }
+
     try {
       final listing = Listing(
         name: nameController.text.trim(),
@@ -317,7 +412,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
             : double.parse(originalPriceController.text),
         quantity: int.parse(quantityController.text),
         initialQuantity: int.parse(quantityController.text),
-        sellerId: sellerId,
+        sellerId: currentSellerId,
         type: selectedType,
         fssaiLicense: selectedType == SellType.cookedFood
             ? (sellerProfile?.fssaiLicense ?? fssaiController.text)
@@ -529,78 +624,81 @@ class _AddListingScreenState extends State<AddListingScreen> {
                       ),
                       const SizedBox(height: 16),
                     ],
-                    TextFormField(
-                      controller: sellerFssaiController,
-                      decoration: InputDecoration(
-                        labelText: "FSSAI License Number *",
-                        prefixIcon: const Icon(Icons.verified),
-                        border: OutlineInputBorder(
+                    // FSSAI License - Only required for cooked food
+                    if (selectedType == SellType.cookedFood) ...[
+                      TextFormField(
+                        controller: sellerFssaiController,
+                        decoration: InputDecoration(
+                          labelText: "FSSAI License Number *",
+                          prefixIcon: const Icon(Icons.verified),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          hintText: "Enter FSSAI license number",
+                          filled: true,
+                          fillColor: Colors.grey.shade50,
+                        ),
+                        validator: (v) => v?.isEmpty ?? true ? "Required" : null,
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade300),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        hintText: "Enter FSSAI license number",
-                        filled: true,
-                        fillColor: Colors.grey.shade50,
-                      ),
-                      validator: (v) => v?.isEmpty ?? true ? "Required" : null,
-                    ),
-                    const SizedBox(height: 12),
-                    Container(
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade300),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: InkWell(
-                        onTap: _pickFssaiLicense,
-                        borderRadius: BorderRadius.circular(12),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Row(
-                            children: [
-                              Icon(Icons.attach_file, color: Colors.orange),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      fssaiLicenseFile == null
-                                          ? "Attach FSSAI License Document"
-                                          : "Document: ${fssaiLicenseFile!.name}",
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: fssaiLicenseFile == null
-                                            ? FontWeight.normal
-                                            : FontWeight.w600,
-                                        color: fssaiLicenseFile == null
-                                            ? Colors.grey.shade600
-                                            : Colors.green.shade700,
-                                      ),
-                                    ),
-                                    if (fssaiLicenseFile != null)
+                        child: InkWell(
+                          onTap: _pickFssaiLicense,
+                          borderRadius: BorderRadius.circular(12),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Row(
+                              children: [
+                                Icon(Icons.attach_file, color: Colors.orange),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
                                       Text(
-                                        "${(fssaiLicenseFile!.size / 1024).toStringAsFixed(2)} KB",
+                                        fssaiLicenseFile == null
+                                            ? "Attach FSSAI License Document"
+                                            : "Document: ${fssaiLicenseFile!.name}",
                                         style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.grey.shade600,
+                                          fontSize: 14,
+                                          fontWeight: fssaiLicenseFile == null
+                                              ? FontWeight.normal
+                                              : FontWeight.w600,
+                                          color: fssaiLicenseFile == null
+                                              ? Colors.grey.shade600
+                                              : Colors.green.shade700,
                                         ),
                                       ),
-                                  ],
+                                      if (fssaiLicenseFile != null)
+                                        Text(
+                                          "${(fssaiLicenseFile!.size / 1024).toStringAsFixed(2)} KB",
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey.shade600,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              if (fssaiLicenseFile != null)
-                                IconButton(
-                                  icon: const Icon(Icons.close, color: Colors.red),
-                                  onPressed: () {
-                                    setState(() {
-                                      fssaiLicenseFile = null;
-                                    });
-                                  },
-                                ),
-                            ],
+                                if (fssaiLicenseFile != null)
+                                  IconButton(
+                                    icon: const Icon(Icons.close, color: Colors.red),
+                                    onPressed: () {
+                                      setState(() {
+                                        fssaiLicenseFile = null;
+                                      });
+                                    },
+                                  ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
+                    ],
                     const SizedBox(height: 20),
                     Row(
                       children: [
@@ -807,6 +905,9 @@ class _AddListingScreenState extends State<AddListingScreen> {
                     selectedType = v!;
                     if (selectedType != SellType.cookedFood) {
                       selectedCookedFoodSource = null;
+                      // Clear FSSAI fields when not cooked food
+                      sellerFssaiController.clear();
+                      fssaiLicenseFile = null;
                     }
                     if (selectedType == SellType.vegetables ||
                         selectedType == SellType.medicine) {

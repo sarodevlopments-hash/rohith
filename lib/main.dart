@@ -5,13 +5,15 @@ import 'models/listing.dart';
 
 import 'models/order.dart';
 import 'models/food_item.dart';
-import 'screens/home_screen.dart';
 import 'firebase_options.dart';
 import 'models/sell_type.dart';
 import 'models/food_category.dart';
 import 'models/cooked_food_source.dart';
 import 'models/seller_profile.dart';
 import 'models/measurement_unit.dart';
+import 'models/rating.dart';
+import 'models/app_user.dart';
+import 'auth/auth_gate.dart';
 // void main() async {
 //   WidgetsFlutterBinding.ensureInitialized();
 
@@ -53,20 +55,24 @@ void main() async {
     Hive.registerAdapter(SellTypeAdapter());
     Hive.registerAdapter(FoodCategoryAdapter());
     Hive.registerAdapter(CookedFoodSourceAdapter());
-    Hive.registerAdapter(SellerProfileAdapter());
-    Hive.registerAdapter(MeasurementUnitAdapter());
+  Hive.registerAdapter(SellerProfileAdapter());
+  Hive.registerAdapter(MeasurementUnitAdapter());
+  Hive.registerAdapter(RatingAdapter());
+  Hive.registerAdapter(AppUserAdapter());
 
-    Hive.registerAdapter(FoodItemAdapter());
-    Hive.registerAdapter(OrderAdapter());
-    Hive.registerAdapter(ListingAdapter());
+  Hive.registerAdapter(FoodItemAdapter());
+  Hive.registerAdapter(OrderAdapter());
+  Hive.registerAdapter(ListingAdapter());
 
     // ✅ Open boxes (ONLY ONCE)
     await Hive.openBox<Listing>('listingBox');
     await Hive.openBox<FoodItem>('foodBox');
-    await Hive.openBox<Order>('ordersBox');
-    await Hive.openBox<int>('savedBox');
-    await Hive.openBox('userBox');
-    await Hive.openBox('sellerProfileBox');
+  await Hive.openBox<Order>('ordersBox');
+  await Hive.openBox<int>('savedBox');
+  await Hive.openBox('userBox');
+  await Hive.openBox('sellerProfileBox');
+  await Hive.openBox('ratingsBox');
+  await Hive.openBox<AppUser>('usersBox');
 
     runApp(const FoodApp());
   } catch (e, stackTrace) {
@@ -116,6 +122,8 @@ void main() async {
                       await Hive.deleteBoxFromDisk('savedBox');
                       await Hive.deleteBoxFromDisk('userBox');
                       await Hive.deleteBoxFromDisk('sellerProfileBox');
+                      await Hive.deleteBoxFromDisk('ratingsBox');
+                      await Hive.deleteBoxFromDisk('usersBox');
                       // Restart the app
                       main();
                     } catch (deleteError) {
@@ -143,26 +151,8 @@ class FoodApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Food App',
       theme: ThemeData(primarySwatch: Colors.orange),
-//***************do not remove this is for auth */
-      // ✅ Auth-based navigation
-      // home: StreamBuilder<User?>(
-      //   stream: FirebaseAuth.instance.authStateChanges(),
-      //   builder: (context, snapshot) {
-      //     if (snapshot.connectionState == ConnectionState.waiting) {
-      //       return const Scaffold(
-      //         body: Center(child: CircularProgressIndicator()),
-      //       );
-      //     }
-
-      //     if (snapshot.hasData) {
-      //       return const HomeScreen();
-      //     }
-
-      //     return const LoginScreen();
-      //   },
-      // ),
-      //home: const SellerDashboardScreen(sellerId: 'local_seller_1'),
-       home: const HomeScreen(),
+      // ✅ Auth-based navigation with OTP
+      home: const AuthGate(),
 
     );
   }

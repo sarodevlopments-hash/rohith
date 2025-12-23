@@ -4,10 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image_picker/image_picker.dart';
 import 'package:hive/hive.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../models/listing.dart';
+import '../models/sell_type.dart';
 import '../models/food_category.dart';
-import '../models/measurement_unit.dart';
 import '../models/order.dart';
 import '../models/rating.dart';
 import '../screens/confirmation_bottom_sheet.dart';
@@ -111,17 +110,6 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
       final discountedTotal = widget.listing.price * selectedQuantity;
       final savings = originalTotal - discountedTotal;
 
-      // Get current user ID
-      final currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Please log in to continue')),
-          );
-        }
-        return;
-      }
-
       // Create order
       final order = Order(
         foodName: widget.listing.name,
@@ -133,7 +121,6 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
         quantity: selectedQuantity,
         originalPrice: widget.listing.originalPrice ?? widget.listing.price,
         discountedPrice: widget.listing.price,
-        userId: currentUser.uid,
       );
 
       // Update listing quantity
