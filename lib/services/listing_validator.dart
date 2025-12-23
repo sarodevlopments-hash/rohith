@@ -7,6 +7,10 @@ class ListingValidator {
       return "Item name is required";
     }
 
+    if (l.imagePath == null || l.imagePath!.isEmpty) {
+      return "Product image is required";
+    }
+
     if (l.quantity <= 0) {
       return "Quantity must be greater than 0";
     }
@@ -38,7 +42,7 @@ class ListingValidator {
 // }
 
 
-    // ✅ Cooked food rules
+    // ✅ Cooked food rules (not applicable for vegetables)
     if (l.type == SellType.cookedFood) {
       if (l.fssaiLicense == null || l.fssaiLicense!.isEmpty) {
         return "FSSAI license is required";
@@ -55,6 +59,11 @@ class ListingValidator {
       if (!l.expiryDate!.isAfter(l.preparedAt!)) {
         return "Expiry must be after preparation time";
       }
+    }
+
+    // ✅ Vegetables don't require dates
+    if (l.type == SellType.vegetables) {
+      // No date requirements for vegetables
     }
 
     return null;

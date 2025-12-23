@@ -1,6 +1,16 @@
+import 'package:hive/hive.dart';
+
+part 'food_category.g.dart';
+
+@HiveType(typeId: 11)
 enum FoodCategory {
+  @HiveField(0)
   veg,
+
+  @HiveField(1)
   egg,
+
+  @HiveField(2)
   nonVeg,
 }
 

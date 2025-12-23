@@ -2,6 +2,7 @@ import 'package:hive/hive.dart';
 import 'sell_type.dart';
 import 'food_category.dart';
 import 'cooked_food_source.dart';
+import 'measurement_unit.dart';
 
 part 'listing.g.dart';
 
@@ -20,7 +21,7 @@ class Listing extends HiveObject {
   final double? originalPrice;
 
   @HiveField(4)
-  final int quantity;
+  int quantity;
 
   @HiveField(5)
   final SellType type;
@@ -40,6 +41,18 @@ class Listing extends HiveObject {
   @HiveField(10)
   final CookedFoodSource? cookedFoodSource;
 
+  @HiveField(11)
+  final int initialQuantity;
+
+  @HiveField(12)
+  String sellerId;
+
+  @HiveField(13)
+  final String? imagePath; // Path to product image
+
+  @HiveField(14)
+  final MeasurementUnit? measurementUnit; // For groceries/vegetables
+
   Listing({
     required this.name,
     required this.sellerName,
@@ -47,10 +60,14 @@ class Listing extends HiveObject {
     this.originalPrice,
     required this.quantity,
     required this.type,
+    required this.initialQuantity,
+    required this.sellerId,
     this.fssaiLicense,
     this.preparedAt,
     this.expiryDate,
     required this.category,
     this.cookedFoodSource,
+    this.imagePath,
+    this.measurementUnit,
   });
 }
