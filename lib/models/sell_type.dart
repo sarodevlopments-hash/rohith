@@ -15,4 +15,41 @@ enum SellType {
 
   @HiveField(3)
   medicine,
+
+  @HiveField(4)
+  liveKitchen, // Live Kitchen - cook on demand, real-time ordering
+}
+
+extension SellTypeExtension on SellType {
+  String get displayName {
+    switch (this) {
+      case SellType.cookedFood:
+        return 'Cooked Food';
+      case SellType.groceries:
+        return 'Groceries';
+      case SellType.vegetables:
+        return 'Vegetables';
+      case SellType.medicine:
+        return 'Medicine';
+      case SellType.liveKitchen:
+        return 'Live Kitchen';
+    }
+  }
+
+  String get description {
+    switch (this) {
+      case SellType.cookedFood:
+        return 'Pre-cooked food items';
+      case SellType.groceries:
+        return 'Grocery items';
+      case SellType.vegetables:
+        return 'Fresh vegetables';
+      case SellType.medicine:
+        return 'Medical items';
+      case SellType.liveKitchen:
+        return 'Cook on demand - real-time orders';
+    }
+  }
+
+  bool get isLiveKitchen => this == SellType.liveKitchen;
 }

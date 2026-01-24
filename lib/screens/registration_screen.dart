@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/app_user.dart';
 import '../services/user_service.dart';
-import 'home_screen.dart';
+import 'main_tab_screen.dart';
 
 class RegistrationScreen extends StatefulWidget {
   final String email;
@@ -84,8 +84,15 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         }
       }
 
-      // Create user profile
-      final appUser = AppUser(
+      // Create or update user profile
+      final existingUser = await userService.getUser(firebaseUser.uid);
+      final appUser = existingUser?.copyWith(
+        fullName: _nameController.text.trim(),
+        email: _emailController.text.trim(),
+        phoneNumber: phoneNumber ?? existingUser.phoneNumber,
+        lastLoginAt: DateTime.now(),
+        isRegistered: true,
+      ) ?? AppUser(
         uid: firebaseUser.uid,
         fullName: _nameController.text.trim(),
         email: _emailController.text.trim(),
@@ -109,9 +116,11 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
           ),
         );
 
-        Navigator.pushReplacement(
+        // Navigate to MainTabScreen instead of HomeScreen
+        Navigator.pushAndRemoveUntil(
           context,
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
+          MaterialPageRoute(builder: (_) => const MainTabScreen()),
+          (route) => false, // Remove all previous routes
         );
       }
     } on FirebaseAuthException catch (e) {

@@ -30,15 +30,23 @@ class ListingAdapter extends TypeAdapter<Listing> {
       expiryDate: fields[8] as DateTime?,
       category: fields[9] as FoodCategory,
       cookedFoodSource: fields[10] as CookedFoodSource?,
-      imagePath: fields.containsKey(13) ? fields[13] as String? : null,
-      measurementUnit: fields.containsKey(14) ? fields[14] as MeasurementUnit? : null,
+      imagePath: fields[13] as String?,
+      measurementUnit: fields[14] as MeasurementUnit?,
+      packSizes: (fields[15] as List?)?.cast<PackSize>(),
+      isBulkFood: fields[16] == null ? false : fields[16] as bool,
+      servesCount: fields[17] as int?,
+      portionDescription: fields[18] as String?,
+      isKitchenOpen: fields[19] == null ? false : fields[19] as bool,
+      preparationTimeMinutes: fields[20] as int?,
+      maxCapacity: fields[21] as int?,
+      currentOrders: fields[22] == null ? 0 : fields[22] as int,
     );
   }
 
   @override
   void write(BinaryWriter writer, Listing obj) {
     writer
-      ..writeByte(15)
+      ..writeByte(23)
       ..writeByte(0)
       ..write(obj.name)
       ..writeByte(1)
@@ -68,7 +76,23 @@ class ListingAdapter extends TypeAdapter<Listing> {
       ..writeByte(13)
       ..write(obj.imagePath)
       ..writeByte(14)
-      ..write(obj.measurementUnit);
+      ..write(obj.measurementUnit)
+      ..writeByte(15)
+      ..write(obj.packSizes)
+      ..writeByte(16)
+      ..write(obj.isBulkFood)
+      ..writeByte(17)
+      ..write(obj.servesCount)
+      ..writeByte(18)
+      ..write(obj.portionDescription)
+      ..writeByte(19)
+      ..write(obj.isKitchenOpen)
+      ..writeByte(20)
+      ..write(obj.preparationTimeMinutes)
+      ..writeByte(21)
+      ..write(obj.maxCapacity)
+      ..writeByte(22)
+      ..write(obj.currentOrders);
   }
 
   @override

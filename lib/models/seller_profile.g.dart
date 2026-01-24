@@ -22,13 +22,15 @@ class SellerProfileAdapter extends TypeAdapter<SellerProfile> {
       cookedFoodSource: fields[2] as CookedFoodSource?,
       defaultFoodType: fields[3] as SellType?,
       sellerId: fields[4] as String,
+      phoneNumber: fields[5] as String,
+      pickupLocation: fields[6] as String,
     );
   }
 
   @override
   void write(BinaryWriter writer, SellerProfile obj) {
     writer
-      ..writeByte(5)
+      ..writeByte(7)
       ..writeByte(0)
       ..write(obj.sellerName)
       ..writeByte(1)
@@ -38,7 +40,11 @@ class SellerProfileAdapter extends TypeAdapter<SellerProfile> {
       ..writeByte(3)
       ..write(obj.defaultFoodType)
       ..writeByte(4)
-      ..write(obj.sellerId);
+      ..write(obj.sellerId)
+      ..writeByte(5)
+      ..write(obj.phoneNumber)
+      ..writeByte(6)
+      ..write(obj.pickupLocation);
   }
 
   @override

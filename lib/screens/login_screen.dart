@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/user_service.dart';
 import 'registration_screen.dart';
-import 'home_screen.dart';
+import 'main_tab_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -66,13 +66,30 @@ class _LoginScreenState extends State<LoginScreen> {
           );
         }
       } else {
-        // Existing user - update last login and go to home
+        // Existing user - check if registered
+        final appUser = await userService.getUser(user.uid);
         await userService.updateLastLogin(user.uid);
+        
         if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const HomeScreen()),
-          );
+          if (appUser != null && appUser.isRegistered) {
+            // User is registered, go to main screen
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const MainTabScreen()),
+            );
+          } else {
+            // User exists but not registered, complete registration
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (_) => RegistrationScreen(
+                  email: user.email ?? '',
+                  firebaseUser: user,
+                  isNewUser: false,
+                ),
+              ),
+            );
+          }
         }
       }
     } on FirebaseAuthException catch (e) {

@@ -6,11 +6,17 @@ import 'models/listing.dart';
 import 'models/order.dart';
 import 'models/food_item.dart';
 import 'firebase_options.dart';
+import 'services/notification_service.dart';
+import 'services/scheduled_listing_service.dart';
+import 'services/accepted_order_notification_service.dart';
 import 'models/sell_type.dart';
 import 'models/food_category.dart';
 import 'models/cooked_food_source.dart';
 import 'models/seller_profile.dart';
 import 'models/measurement_unit.dart';
+import 'models/pack_size.dart';
+import 'models/schedule_type.dart';
+import 'models/scheduled_listing.dart';
 import 'models/rating.dart';
 import 'models/app_user.dart';
 import 'auth/auth_gate.dart';
@@ -39,6 +45,8 @@ import 'auth/auth_gate.dart';
 // await Hive.openBox<Listing>('listingBox');
 //   runApp(const FoodApp());
 // }
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -63,6 +71,9 @@ void main() async {
   Hive.registerAdapter(FoodItemAdapter());
   Hive.registerAdapter(OrderAdapter());
   Hive.registerAdapter(ListingAdapter());
+  Hive.registerAdapter(PackSizeAdapter());
+  Hive.registerAdapter(ScheduleTypeAdapter());
+  Hive.registerAdapter(ScheduledListingAdapter());
 
     // ✅ Open boxes (ONLY ONCE)
     await Hive.openBox<Listing>('listingBox');
@@ -72,7 +83,17 @@ void main() async {
   await Hive.openBox('userBox');
   await Hive.openBox('sellerProfileBox');
   await Hive.openBox('ratingsBox');
-  await Hive.openBox<AppUser>('usersBox');
+    await Hive.openBox<AppUser>('usersBox');
+    await Hive.openBox('cartBox');
+    await Hive.openBox<ScheduledListing>('scheduledListingsBox');
+
+    // ✅ Init local notifications (foreground/heads-up)
+    await NotificationService.init();
+    NotificationService.registerNavigatorKey(navigatorKey);
+    AcceptedOrderNotificationService.setNavigatorKey(navigatorKey);
+
+    // ✅ Start scheduled listing service
+    ScheduledListingService.start();
 
     runApp(const FoodApp());
   } catch (e, stackTrace) {
@@ -150,6 +171,7 @@ class FoodApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Food App',
+      navigatorKey: navigatorKey,
       theme: ThemeData(primarySwatch: Colors.orange),
       // ✅ Auth-based navigation with OTP
       home: const AuthGate(),

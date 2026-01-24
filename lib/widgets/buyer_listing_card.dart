@@ -1,17 +1,18 @@
 import 'dart:io';
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image_picker/image_picker.dart';
 import 'package:hive/hive.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../models/listing.dart';
 import '../models/food_category.dart';
 import '../models/measurement_unit.dart';
-import '../models/order.dart';
+import '../models/pack_size.dart';
+import '../models/sell_type.dart';
 import '../models/rating.dart';
-import '../screens/confirmation_bottom_sheet.dart';
-import '../screens/rating_dialog.dart';
+import '../screens/cart_screen.dart';
+import '../services/cart_service.dart';
 
 class BuyerListingCard extends StatefulWidget {
   final Listing listing;
@@ -24,6 +25,7 @@ class BuyerListingCard extends StatefulWidget {
 
 class _BuyerListingCardState extends State<BuyerListingCard> {
   int selectedQuantity = 1;
+  PackSize? selectedPackSize; // Selected pack size for groceries with multiple packs
   double? averageFoodRating;
   double? averageSellerRating;
 
@@ -58,8 +60,28 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
       case FoodCategory.egg:
         return Colors.orange;
       case FoodCategory.nonVeg:
-        return Colors.red;
+        return Colors.red.shade700; // Darker red for better appearance
     }
+  }
+
+  String _getButtonText(bool isAvailable) {
+    if (!isAvailable) {
+      if (widget.listing.isLiveKitchen) {
+        if (!widget.listing.isKitchenOpen) return 'Kitchen Closed';
+        if (!widget.listing.hasAvailableCapacity) return 'Fully Booked';
+      }
+      return 'Sold Out';
+    }
+    if (widget.listing.isLiveKitchen) {
+      return 'Order Now • ${widget.listing.preparationTimeText}';
+    }
+    if (widget.listing.isValidBulkFood) {
+      return 'Order Bulk Pack (${widget.listing.bulkServingText})';
+    }
+    if (widget.listing.hasMultiplePackSizes && selectedPackSize != null) {
+      return 'Add ${selectedQuantity} Pack${selectedQuantity > 1 ? 's' : ''} to Cart';
+    }
+    return 'Add to Cart (${selectedQuantity}x)';
   }
 
   String _getFoodTypeLabel() {
@@ -73,138 +95,170 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
   }
 
   String _getUnitPrice() {
+    // If pack sizes exist, show pack-specific price format
+    if (widget.listing.hasMultiplePackSizes && widget.listing.packSizes != null && widget.listing.packSizes!.isNotEmpty) {
+      if (selectedPackSize != null && widget.listing.measurementUnit != null) {
+        final label = selectedPackSize!.getDisplayLabel(widget.listing.measurementUnit!.shortLabel);
+        return '₹${selectedPackSize!.price.toStringAsFixed(0)} for $label';
+      }
+      // If no pack selected but packs exist, show first pack as example or prompt
+      final firstPack = widget.listing.packSizes!.first;
+      if (widget.listing.measurementUnit != null) {
+        final label = firstPack.getDisplayLabel(widget.listing.measurementUnit!.shortLabel);
+        return 'Select pack size (e.g., ₹${firstPack.price.toStringAsFixed(0)} for $label)';
+      }
+    }
+    // For groceries/vegetables with measurement unit, show "for" format instead of "per"
+    // Use pack size weight if available, otherwise don't show pack size in price
+    if (widget.listing.type == SellType.groceries || widget.listing.type == SellType.vegetables) {
+      if (widget.listing.measurementUnit != null) {
+        // If there's a single pack size (even if not using multiple pack sizes feature)
+        if (widget.listing.packSizes != null && widget.listing.packSizes!.isNotEmpty) {
+          final packSize = widget.listing.packSizes!.first;
+          final label = packSize.getDisplayLabel(widget.listing.measurementUnit!.shortLabel);
+          return '₹${packSize.price.toStringAsFixed(0)} for $label';
+        }
+        // Don't show pack size if not available - just show price
+        return '₹${widget.listing.price.toStringAsFixed(0)}';
+      }
+    }
+    // Regular items without pack sizes
     if (widget.listing.measurementUnit != null) {
       return '₹${widget.listing.price.toStringAsFixed(0)} per ${widget.listing.measurementUnit!.shortLabel}';
     }
     return '₹${widget.listing.price.toStringAsFixed(0)} per item';
   }
 
-  void _showConfirmation() {
-    if (selectedQuantity > widget.listing.quantity) {
+  double _getCurrentPrice() {
+    return selectedPackSize?.price ?? widget.listing.price;
+  }
+
+  Future<void> _addToCart() async {
+    // Validate pack size selection for groceries with multiple packs
+    if (widget.listing.hasMultiplePackSizes && selectedPackSize == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Only ${widget.listing.quantity} items available')),
+        const SnackBar(content: Text('Please select a pack size')),
       );
       return;
     }
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => ConfirmationBottomSheet(
-        listing: widget.listing,
-        quantity: selectedQuantity,
-        onConfirm: _handlePurchase,
-      ),
-    );
-  }
+    // For live kitchen, check if kitchen is open
+    if (widget.listing.isLiveKitchen) {
+      if (!widget.listing.isKitchenOpen) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Kitchen is currently closed. Please try again later.')),
+        );
+        return;
+      }
+      if (!widget.listing.hasAvailableCapacity) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No order slots available. Please try again later.')),
+        );
+        return;
+      }
+    }
 
-  Future<void> _handlePurchase() async {
-    try {
-      final box = Hive.box<Listing>('listingBox');
-      final ordersBox = Hive.box<Order>('ordersBox');
+    // For bulk items or live kitchen, always use quantity of 1
+    final quantityToAdd = (widget.listing.isValidBulkFood || widget.listing.isLiveKitchen) ? 1 : selectedQuantity;
 
-      // Calculate savings
-      final originalTotal = widget.listing.originalPrice != null
-          ? widget.listing.originalPrice! * selectedQuantity
-          : widget.listing.price * selectedQuantity;
-      final discountedTotal = widget.listing.price * selectedQuantity;
-      final savings = originalTotal - discountedTotal;
+    if (quantityToAdd > widget.listing.quantity && !widget.listing.isLiveKitchen) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(widget.listing.isValidBulkFood 
+            ? 'This bulk pack is not available'
+            : 'Only ${widget.listing.quantity} items available')),
+      );
+      return;
+    }
 
-      // Get current user ID
-      final currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Please log in to continue')),
-          );
-        }
+    final sellerInCart = CartService.currentSellerId();
+    if (sellerInCart != null && sellerInCart != widget.listing.sellerId) {
+      final clear = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Different seller'),
+          content: const Text(
+            'Your cart contains items from another seller. Please complete or clear the current cart to continue.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Clear cart'),
+            ),
+          ],
+        ),
+      );
+      if (clear != true) return;
+      CartService.clear();
+    }
+
+    await CartService.addItem(widget.listing, quantityToAdd, packSize: selectedPackSize);
+    if (mounted) {
+      // Don't show notification if already on cart screen
+      // Check by looking for CartScreen in the widget tree
+      bool isOnCartScreen = false;
+      try {
+        final cartScreen = context.findAncestorWidgetOfExactType<CartScreen>();
+        isOnCartScreen = cartScreen != null;
+      } catch (e) {
+        // If check fails, assume we're not on cart screen
+      }
+      
+      if (isOnCartScreen) {
         return;
       }
 
-      // Create order
-      final order = Order(
-        foodName: widget.listing.name,
-        sellerName: widget.listing.sellerName,
-        pricePaid: discountedTotal,
-        savedAmount: savings,
-        purchasedAt: DateTime.now(),
-        listingId: widget.listing.key.toString(),
-        quantity: selectedQuantity,
-        originalPrice: widget.listing.originalPrice ?? widget.listing.price,
-        discountedPrice: widget.listing.price,
-        userId: currentUser.uid,
-      );
-
-      // Update listing quantity
-      final updatedListing = Listing(
-        name: widget.listing.name,
-        sellerName: widget.listing.sellerName,
-        price: widget.listing.price,
-        originalPrice: widget.listing.originalPrice,
-        quantity: widget.listing.quantity - selectedQuantity,
-        initialQuantity: widget.listing.initialQuantity,
-        type: widget.listing.type,
-        sellerId: widget.listing.sellerId,
-        fssaiLicense: widget.listing.fssaiLicense,
-        preparedAt: widget.listing.preparedAt,
-        expiryDate: widget.listing.expiryDate,
-        category: widget.listing.category,
-        cookedFoodSource: widget.listing.cookedFoodSource,
-        imagePath: widget.listing.imagePath,
-        measurementUnit: widget.listing.measurementUnit,
-      );
-
-      await box.put(widget.listing.key, updatedListing);
-      await ordersBox.add(order);
-
-      if (mounted) {
-        Navigator.pop(context); // Close bottom sheet
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Order placed! You saved ₹${savings.toStringAsFixed(2)}'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 3),
+      String message;
+      if (widget.listing.isLiveKitchen) {
+        message = 'Order placed! Preparation time: ${widget.listing.preparationTimeText}';
+      } else if (widget.listing.isValidBulkFood) {
+        message = 'Bulk pack added to cart (${widget.listing.bulkServingText})';
+      } else {
+        message = 'Added to cart';
+      }
+      
+      // Hide any existing snackbar first
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      
+      final scaffoldMessenger = ScaffoldMessenger.of(context);
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text(message),
+          duration: const Duration(seconds: 5),
+          behavior: SnackBarBehavior.fixed,
+          action: SnackBarAction(
+            label: 'View Cart',
+            onPressed: () {
+              scaffoldMessenger.hideCurrentSnackBar();
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const CartScreen()),
+              );
+            },
           ),
-        );
-
-        // Show rating dialog after a delay
-        Future.delayed(const Duration(seconds: 1), () {
-          if (mounted) {
-            _showRatingDialog(order);
-          }
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
-      }
+        ),
+      );
+      
+      // Explicitly dismiss after 5 seconds to ensure it doesn't stay longer
+      Timer(const Duration(seconds: 5), () {
+        if (mounted) {
+          scaffoldMessenger.hideCurrentSnackBar();
+        }
+      });
     }
-  }
-
-  void _showRatingDialog(Order order) {
-    showDialog(
-      context: context,
-      builder: (context) => RatingDialog(
-        listing: widget.listing,
-        order: order,
-        onRated: () {
-          _loadRatings(); // Reload ratings after rating
-        },
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     final discount = _calculateDiscount();
-    final isAvailable = widget.listing.quantity > 0;
-    final totalPrice = widget.listing.price * selectedQuantity;
-    final originalTotal = widget.listing.originalPrice != null
-        ? widget.listing.originalPrice! * selectedQuantity
-        : totalPrice;
+    // For live kitchen, check kitchen status and capacity
+    final isAvailable = widget.listing.isLiveKitchen 
+        ? widget.listing.isLiveKitchenAvailable 
+        : widget.listing.quantity > 0;
+    final currentPrice = _getCurrentPrice();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -281,7 +335,7 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
                               ? Icons.eco
                               : widget.listing.category == FoodCategory.egg
                                   ? Icons.egg
-                                  : Icons.restaurant,
+                                  : Icons.set_meal, // Better icon for non-veg
                           color: Colors.white,
                           size: 16,
                         ),
@@ -298,6 +352,86 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
                     ),
                   ),
                 ),
+                // Bulk Food Badge (Top Left, below food type)
+                if (widget.listing.isValidBulkFood)
+                  Positioned(
+                    top: 52,
+                    left: 12,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.purple.shade600,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.2),
+                            blurRadius: 4,
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.groups, color: Colors.white, size: 14),
+                          const SizedBox(width: 4),
+                          Text(
+                            widget.listing.bulkServingText,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                // Live Kitchen Badge (Top Left, below food type or bulk badge)
+                if (widget.listing.isLiveKitchen)
+                  Positioned(
+                    top: widget.listing.isValidBulkFood ? 92 : 52,
+                    left: 12,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: widget.listing.isKitchenOpen 
+                              ? [Colors.green.shade400, Colors.green.shade600]
+                              : [Colors.grey.shade400, Colors.grey.shade600],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.2),
+                            blurRadius: 4,
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            widget.listing.isKitchenOpen ? Icons.restaurant : Icons.restaurant_outlined,
+                            color: Colors.white,
+                            size: 14,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            widget.listing.isKitchenOpen 
+                                ? '🔥 Live Kitchen' 
+                                : 'Kitchen Closed',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 // Discount Badge (Top Right)
                 if (discount > 0)
                   Positioned(
@@ -422,7 +556,7 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
                       const SizedBox(width: 8),
                     ],
                     Text(
-                      '₹${widget.listing.price.toStringAsFixed(0)}',
+                      '₹${currentPrice.toStringAsFixed(0)}',
                       style: const TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
@@ -466,10 +600,18 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.inventory_2, size: 14, color: Colors.blue.shade700),
+                          Icon(
+                            widget.listing.isLiveKitchen ? Icons.people_outline : Icons.inventory_2, 
+                            size: 14, 
+                            color: Colors.blue.shade700,
+                          ),
                           const SizedBox(width: 4),
                           Text(
-                            '${widget.listing.quantity} left',
+                            widget.listing.isLiveKitchen
+                                ? '${widget.listing.remainingCapacity} slots'
+                                : widget.listing.isValidBulkFood 
+                                    ? '${widget.listing.quantity} pack${widget.listing.quantity > 1 ? 's' : ''}'
+                                    : '${widget.listing.quantity} left',
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.blue.shade700,
@@ -489,13 +631,17 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.category, size: 14, color: Colors.purple.shade700),
+                          Icon(
+                            widget.listing.isLiveKitchen ? Icons.restaurant : Icons.category, 
+                            size: 14, 
+                            color: widget.listing.isLiveKitchen ? Colors.deepOrange.shade700 : Colors.purple.shade700,
+                          ),
                           const SizedBox(width: 4),
                           Text(
-                            widget.listing.type.name,
+                            widget.listing.type.displayName,
                             style: TextStyle(
                               fontSize: 12,
-                              color: Colors.purple.shade700,
+                              color: widget.listing.isLiveKitchen ? Colors.deepOrange.shade700 : Colors.purple.shade700,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -505,20 +651,382 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
                   ],
                 ),
 
+                // Bulk Food Info
+                if (widget.listing.isValidBulkFood) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Colors.purple.shade50, Colors.purple.shade100],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.purple.shade200),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: Colors.purple.shade600,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(Icons.groups, color: Colors.white, size: 16),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Bulk Food Item',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  Text(
+                                    widget.listing.bulkServingText,
+                                    style: TextStyle(
+                                      color: Colors.purple.shade700,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (widget.listing.portionDescription != null && widget.listing.portionDescription!.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Icon(Icons.local_dining, size: 14, color: Colors.purple.shade600),
+                              const SizedBox(width: 6),
+                              Text(
+                                widget.listing.portionDescription!,
+                                style: TextStyle(
+                                  color: Colors.purple.shade800,
+                                  fontStyle: FontStyle.italic,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.shade100,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.info_outline, size: 12, color: Colors.amber.shade800),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Sold as complete pack only',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.amber.shade900,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
+                // Live Kitchen Info
+                if (widget.listing.isLiveKitchen) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: widget.listing.isKitchenOpen 
+                            ? [Colors.green.shade50, Colors.green.shade100]
+                            : [Colors.grey.shade100, Colors.grey.shade200],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: widget.listing.isKitchenOpen 
+                            ? Colors.green.shade300 
+                            : Colors.grey.shade400,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: widget.listing.isKitchenOpen 
+                                      ? [Colors.green.shade400, Colors.green.shade600]
+                                      : [Colors.grey.shade400, Colors.grey.shade600],
+                                ),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Icon(
+                                widget.listing.isKitchenOpen ? Icons.restaurant : Icons.restaurant_outlined,
+                                color: Colors.white,
+                                size: 16,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    widget.listing.isKitchenOpen ? '🔥 Live Kitchen Open' : 'Kitchen Closed',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: widget.listing.isKitchenOpen 
+                                          ? Colors.green.shade800 
+                                          : Colors.grey.shade700,
+                                    ),
+                                  ),
+                                  Text(
+                                    widget.listing.isKitchenOpen 
+                                        ? 'Cooking fresh on order'
+                                        : 'Not accepting orders now',
+                                    style: TextStyle(
+                                      color: widget.listing.isKitchenOpen 
+                                          ? Colors.green.shade700 
+                                          : Colors.grey.shade600,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (widget.listing.isKitchenOpen) ...[
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              // Preparation Time
+                              Expanded(
+                                child: Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.shade50,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: Colors.orange.shade200),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.timer, size: 16, color: Colors.orange.shade700),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              'Prep Time',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                color: Colors.orange.shade600,
+                                              ),
+                                            ),
+                                            Text(
+                                              widget.listing.preparationTimeText,
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.orange.shade800,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              // Available Slots
+                              Expanded(
+                                child: Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: widget.listing.hasAvailableCapacity 
+                                        ? Colors.blue.shade50 
+                                        : Colors.red.shade50,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: widget.listing.hasAvailableCapacity 
+                                          ? Colors.blue.shade200 
+                                          : Colors.red.shade200,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.people_outline, 
+                                        size: 16, 
+                                        color: widget.listing.hasAvailableCapacity 
+                                            ? Colors.blue.shade700 
+                                            : Colors.red.shade700,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              'Slots',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                color: widget.listing.hasAvailableCapacity 
+                                                    ? Colors.blue.shade600 
+                                                    : Colors.red.shade600,
+                                              ),
+                                            ),
+                                            Text(
+                                              widget.listing.hasAvailableCapacity 
+                                                  ? '${widget.listing.remainingCapacity} available'
+                                                  : 'Fully booked',
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.bold,
+                                                color: widget.listing.hasAvailableCapacity 
+                                                    ? Colors.blue.shade800 
+                                                    : Colors.red.shade800,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.shade100,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.info_outline, size: 12, color: Colors.amber.shade800),
+                              const SizedBox(width: 4),
+                              Flexible(
+                                child: Text(
+                                  'Freshly prepared after you order',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.amber.shade900,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
                 const SizedBox(height: 16),
 
-                // Quantity Selection
-                if (isAvailable) ...[
+                // Pack Size Selection (for groceries with multiple packs)
+                if (isAvailable && widget.listing.hasMultiplePackSizes && widget.listing.packSizes != null) ...[
+                  const Text(
+                    'Select Pack Size:',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: widget.listing.packSizes!.map((pack) {
+                      final isSelected = selectedPackSize?.quantity == pack.quantity &&
+                          selectedPackSize?.price == pack.price;
+                      final unitLabel = widget.listing.measurementUnit?.shortLabel ?? '';
+                      return ChoiceChip(
+                        label: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              pack.getDisplayLabel(unitLabel),
+                              style: TextStyle(
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                fontSize: 13,
+                              ),
+                            ),
+                            Text(
+                              '₹${pack.price.toStringAsFixed(0)}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isSelected ? Colors.white : Colors.grey.shade700,
+                              ),
+                            ),
+                          ],
+                        ),
+                        selected: isSelected,
+                        onSelected: (selected) {
+                          setState(() {
+                            selectedPackSize = selected ? pack : null;
+                            // Reset quantity to 1 when pack size changes
+                            selectedQuantity = 1;
+                          });
+                        },
+                        selectedColor: Colors.orange,
+                        labelStyle: TextStyle(
+                          color: isSelected ? Colors.white : Colors.black87,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
+                // Quantity Selection (Number of Packs) - Not shown for bulk items or live kitchen (always 1)
+                if (isAvailable && !widget.listing.isValidBulkFood && !widget.listing.isLiveKitchen) ...[
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      const Text(
+                      Text(
                         'Quantity:',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade700,
                         ),
                       ),
-                      const Spacer(),
                       Container(
                         decoration: BoxDecoration(
                           border: Border.all(color: Colors.grey.shade300),
@@ -566,58 +1074,17 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  // Total Price Display
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.green.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.green.shade200),
+                  if (widget.listing.hasMultiplePackSizes && selectedPackSize != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      '${selectedQuantity} pack${selectedQuantity > 1 ? 's' : ''} of ${selectedPackSize!.getDisplayLabel(widget.listing.measurementUnit?.shortLabel ?? '')}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                        fontStyle: FontStyle.italic,
+                      ),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Total:',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            if (widget.listing.originalPrice != null)
-                              Text(
-                                '₹${originalTotal.toStringAsFixed(0)}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey.shade600,
-                                  decoration: TextDecoration.lineThrough,
-                                ),
-                              ),
-                            Text(
-                              '₹${totalPrice.toStringAsFixed(0)}',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.green.shade700,
-                              ),
-                            ),
-                            if (widget.listing.originalPrice != null)
-                              Text(
-                                'Save ₹${(originalTotal - totalPrice).toStringAsFixed(0)}',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.green.shade600,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
+                  ],
                   const SizedBox(height: 12),
                 ],
 
@@ -625,9 +1092,15 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: isAvailable ? _showConfirmation : null,
+                    onPressed: isAvailable ? _addToCart : null,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: isAvailable ? Colors.orange : Colors.grey,
+                      backgroundColor: isAvailable 
+                          ? (widget.listing.isLiveKitchen 
+                              ? Colors.green.shade600
+                              : widget.listing.isValidBulkFood 
+                                  ? Colors.purple 
+                                  : Colors.orange)
+                          : Colors.grey,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
@@ -635,14 +1108,24 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
                       ),
                       elevation: 2,
                     ),
-                    child: Text(
-                      isAvailable
-                          ? 'Buy Now (${selectedQuantity}x)'
-                          : 'Sold Out',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (widget.listing.isLiveKitchen && isAvailable) ...[
+                          const Icon(Icons.restaurant, size: 20),
+                          const SizedBox(width: 8),
+                        ] else if (widget.listing.isValidBulkFood && isAvailable) ...[
+                          const Icon(Icons.groups, size: 20),
+                          const SizedBox(width: 8),
+                        ],
+                        Text(
+                          _getButtonText(isAvailable),
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),

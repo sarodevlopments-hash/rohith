@@ -26,14 +26,26 @@ class OrderAdapter extends TypeAdapter<Order> {
       quantity: fields[6] as int,
       originalPrice: fields[7] as double,
       discountedPrice: fields[8] as double,
-      userId: fields.containsKey(9) ? fields[9] as String : 'legacy_user', // Backward compatibility
+      userId: fields[9] as String,
+      sellerId: fields[15] as String,
+      orderStatus: fields[10] as String,
+      orderId: fields[11] as String?,
+      paymentCompletedAt: fields[12] as DateTime?,
+      sellerRespondedAt: fields[13] as DateTime?,
+      paymentMethod: fields[14] as String?,
+      selectedPackQuantity: fields[16] as double?,
+      selectedPackPrice: fields[17] as double?,
+      selectedPackLabel: fields[18] as String?,
+      isLiveKitchenOrder: fields[19] as bool?,
+      preparationTimeMinutes: fields[20] as int?,
+      statusChangedAt: fields[21] as DateTime?,
     );
   }
 
   @override
   void write(BinaryWriter writer, Order obj) {
     writer
-      ..writeByte(10)
+      ..writeByte(22)
       ..writeByte(0)
       ..write(obj.foodName)
       ..writeByte(1)
@@ -53,7 +65,31 @@ class OrderAdapter extends TypeAdapter<Order> {
       ..writeByte(8)
       ..write(obj.discountedPrice)
       ..writeByte(9)
-      ..write(obj.userId);
+      ..write(obj.userId)
+      ..writeByte(10)
+      ..write(obj.orderStatus)
+      ..writeByte(11)
+      ..write(obj.orderId)
+      ..writeByte(12)
+      ..write(obj.paymentCompletedAt)
+      ..writeByte(13)
+      ..write(obj.sellerRespondedAt)
+      ..writeByte(14)
+      ..write(obj.paymentMethod)
+      ..writeByte(15)
+      ..write(obj.sellerId)
+      ..writeByte(16)
+      ..write(obj.selectedPackQuantity)
+      ..writeByte(17)
+      ..write(obj.selectedPackPrice)
+      ..writeByte(18)
+      ..write(obj.selectedPackLabel)
+      ..writeByte(19)
+      ..write(obj.isLiveKitchenOrder)
+      ..writeByte(20)
+      ..write(obj.preparationTimeMinutes)
+      ..writeByte(21)
+      ..write(obj.statusChangedAt);
   }
 
   @override

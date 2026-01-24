@@ -21,12 +21,20 @@ class SellerProfile extends HiveObject {
   @HiveField(4)
   String sellerId;
 
+  @HiveField(5)
+  String phoneNumber; // Seller contact number
+
+  @HiveField(6)
+  String pickupLocation; // Pickup/collection address
+
   SellerProfile({
     required this.sellerName,
     required this.fssaiLicense,
     this.cookedFoodSource,
     this.defaultFoodType,
     required this.sellerId,
+    this.phoneNumber = '',
+    this.pickupLocation = '',
   });
 }
 

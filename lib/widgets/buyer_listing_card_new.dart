@@ -1,16 +1,16 @@
 import 'dart:io';
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image_picker/image_picker.dart';
 import 'package:hive/hive.dart';
 import '../models/listing.dart';
-import '../models/sell_type.dart';
 import '../models/food_category.dart';
-import '../models/order.dart';
+import '../models/measurement_unit.dart';
 import '../models/rating.dart';
-import '../screens/confirmation_bottom_sheet.dart';
-import '../screens/rating_dialog.dart';
+import '../screens/cart_screen.dart';
+import '../services/cart_service.dart';
 
 class BuyerListingCard extends StatefulWidget {
   final Listing listing;
@@ -57,7 +57,7 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
       case FoodCategory.egg:
         return Colors.orange;
       case FoodCategory.nonVeg:
-        return Colors.red;
+        return Colors.red.shade700; // Darker red for better appearance
     }
   }
 
@@ -78,7 +78,7 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
     return '₹${widget.listing.price.toStringAsFixed(0)} per item';
   }
 
-  void _showConfirmation() {
+  Future<void> _addToCart() async {
     if (selectedQuantity > widget.listing.quantity) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Only ${widget.listing.quantity} items available')),
@@ -86,112 +86,82 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
       return;
     }
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => ConfirmationBottomSheet(
-        listing: widget.listing,
-        quantity: selectedQuantity,
-        onConfirm: _handlePurchase,
-      ),
-    );
-  }
-
-  Future<void> _handlePurchase() async {
-    try {
-      final box = Hive.box<Listing>('listingBox');
-      final ordersBox = Hive.box<Order>('ordersBox');
-
-      // Calculate savings
-      final originalTotal = widget.listing.originalPrice != null
-          ? widget.listing.originalPrice! * selectedQuantity
-          : widget.listing.price * selectedQuantity;
-      final discountedTotal = widget.listing.price * selectedQuantity;
-      final savings = originalTotal - discountedTotal;
-
-      // Create order
-      final order = Order(
-        foodName: widget.listing.name,
-        sellerName: widget.listing.sellerName,
-        pricePaid: discountedTotal,
-        savedAmount: savings,
-        purchasedAt: DateTime.now(),
-        listingId: widget.listing.key.toString(),
-        quantity: selectedQuantity,
-        originalPrice: widget.listing.originalPrice ?? widget.listing.price,
-        discountedPrice: widget.listing.price,
-      );
-
-      // Update listing quantity
-      final updatedListing = Listing(
-        name: widget.listing.name,
-        sellerName: widget.listing.sellerName,
-        price: widget.listing.price,
-        originalPrice: widget.listing.originalPrice,
-        quantity: widget.listing.quantity - selectedQuantity,
-        initialQuantity: widget.listing.initialQuantity,
-        type: widget.listing.type,
-        sellerId: widget.listing.sellerId,
-        fssaiLicense: widget.listing.fssaiLicense,
-        preparedAt: widget.listing.preparedAt,
-        expiryDate: widget.listing.expiryDate,
-        category: widget.listing.category,
-        cookedFoodSource: widget.listing.cookedFoodSource,
-        imagePath: widget.listing.imagePath,
-        measurementUnit: widget.listing.measurementUnit,
-      );
-
-      await box.put(widget.listing.key, updatedListing);
-      await ordersBox.add(order);
-
-      if (mounted) {
-        Navigator.pop(context); // Close bottom sheet
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Order placed! You saved ₹${savings.toStringAsFixed(2)}'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 3),
+    final sellerInCart = CartService.currentSellerId();
+    if (sellerInCart != null && sellerInCart != widget.listing.sellerId) {
+      final clear = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Different seller'),
+          content: const Text(
+            'Your cart contains items from another seller. Please complete or clear the current cart to continue.',
           ),
-        );
-
-        // Show rating dialog after a delay
-        Future.delayed(const Duration(seconds: 1), () {
-          if (mounted) {
-            _showRatingDialog(order);
-          }
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
-      }
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Clear cart'),
+            ),
+          ],
+        ),
+      );
+      if (clear != true) return;
+      CartService.clear();
     }
-  }
 
-  void _showRatingDialog(Order order) {
-    showDialog(
-      context: context,
-      builder: (context) => RatingDialog(
-        listing: widget.listing,
-        order: order,
-        onRated: () {
-          _loadRatings(); // Reload ratings after rating
-        },
-      ),
-    );
+    await CartService.addItem(widget.listing, selectedQuantity);
+    if (mounted) {
+      // Don't show notification if already on cart screen
+      // Check by looking for CartScreen in the widget tree
+      bool isOnCartScreen = false;
+      try {
+        final cartScreen = context.findAncestorWidgetOfExactType<CartScreen>();
+        isOnCartScreen = cartScreen != null;
+      } catch (e) {
+        // If check fails, assume we're not on cart screen
+      }
+      
+      if (isOnCartScreen) {
+        return;
+      }
+
+      // Hide any existing snackbar first
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      
+      final scaffoldMessenger = ScaffoldMessenger.of(context);
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: const Text('Added to cart'),
+          duration: const Duration(seconds: 5),
+          behavior: SnackBarBehavior.fixed,
+          action: SnackBarAction(
+            label: 'View Cart',
+            onPressed: () {
+              scaffoldMessenger.hideCurrentSnackBar();
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const CartScreen()),
+              );
+            },
+          ),
+        ),
+      );
+      
+      // Explicitly dismiss after 5 seconds to ensure it doesn't stay longer
+      Timer(const Duration(seconds: 5), () {
+        if (mounted) {
+          scaffoldMessenger.hideCurrentSnackBar();
+        }
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final discount = _calculateDiscount();
     final isAvailable = widget.listing.quantity > 0;
-    final totalPrice = widget.listing.price * selectedQuantity;
-    final originalTotal = widget.listing.originalPrice != null
-        ? widget.listing.originalPrice! * selectedQuantity
-        : totalPrice;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -268,7 +238,7 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
                               ? Icons.eco
                               : widget.listing.category == FoodCategory.egg
                                   ? Icons.egg
-                                  : Icons.restaurant,
+                                  : Icons.set_meal, // Better icon for non-veg
                           color: Colors.white,
                           size: 16,
                         ),
@@ -554,65 +524,13 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  // Total Price Display
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.green.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.green.shade200),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Total:',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            if (widget.listing.originalPrice != null)
-                              Text(
-                                '₹${originalTotal.toStringAsFixed(0)}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey.shade600,
-                                  decoration: TextDecoration.lineThrough,
-                                ),
-                              ),
-                            Text(
-                              '₹${totalPrice.toStringAsFixed(0)}',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.green.shade700,
-                              ),
-                            ),
-                            if (widget.listing.originalPrice != null)
-                              Text(
-                                'Save ₹${(originalTotal - totalPrice).toStringAsFixed(0)}',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.green.shade600,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
                 ],
 
                 // Buy Button
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: isAvailable ? _showConfirmation : null,
+                    onPressed: isAvailable ? _addToCart : null,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: isAvailable ? Colors.orange : Colors.grey,
                       foregroundColor: Colors.white,
@@ -624,7 +542,7 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
                     ),
                     child: Text(
                       isAvailable
-                          ? 'Buy Now (${selectedQuantity}x)'
+                          ? 'Add to Cart (${selectedQuantity}x)'
                           : 'Sold Out',
                       style: const TextStyle(
                         fontSize: 16,

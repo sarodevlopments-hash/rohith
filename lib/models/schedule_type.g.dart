@@ -1,50 +1,40 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-part of 'sell_type.dart';
+part of 'schedule_type.dart';
 
 // **************************************************************************
 // TypeAdapterGenerator
 // **************************************************************************
 
-class SellTypeAdapter extends TypeAdapter<SellType> {
+class ScheduleTypeAdapter extends TypeAdapter<ScheduleType> {
   @override
-  final int typeId = 4;
+  final int typeId = 16;
 
   @override
-  SellType read(BinaryReader reader) {
+  ScheduleType read(BinaryReader reader) {
     switch (reader.readByte()) {
       case 0:
-        return SellType.cookedFood;
+        return ScheduleType.once;
       case 1:
-        return SellType.groceries;
+        return ScheduleType.daily;
       case 2:
-        return SellType.vegetables;
-      case 3:
-        return SellType.medicine;
-      case 4:
-        return SellType.liveKitchen;
+        return ScheduleType.weekly;
       default:
-        return SellType.cookedFood;
+        return ScheduleType.once;
     }
   }
 
   @override
-  void write(BinaryWriter writer, SellType obj) {
+  void write(BinaryWriter writer, ScheduleType obj) {
     switch (obj) {
-      case SellType.cookedFood:
+      case ScheduleType.once:
         writer.writeByte(0);
         break;
-      case SellType.groceries:
+      case ScheduleType.daily:
         writer.writeByte(1);
         break;
-      case SellType.vegetables:
+      case ScheduleType.weekly:
         writer.writeByte(2);
-        break;
-      case SellType.medicine:
-        writer.writeByte(3);
-        break;
-      case SellType.liveKitchen:
-        writer.writeByte(4);
         break;
     }
   }
@@ -55,7 +45,7 @@ class SellTypeAdapter extends TypeAdapter<SellType> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is SellTypeAdapter &&
+      other is ScheduleTypeAdapter &&
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }
