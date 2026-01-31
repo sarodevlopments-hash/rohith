@@ -1,5 +1,6 @@
 import 'package:hive/hive.dart';
 import 'package:flutter/material.dart';
+import 'listing.dart';
 
 part 'order.g.dart';
 
@@ -174,5 +175,24 @@ class Order extends HiveObject {
   bool get canMarkReady {
     if (!(isLiveKitchenOrder ?? false)) return false;
     return orderStatus == 'Preparing';
+  }
+
+  /// Returns true if seller identity should be hidden for this order
+  /// (Groceries and Vegetables should hide seller identity in buyer view)
+  /// This checks the listing type by looking up the listing from Hive
+  bool shouldHideSellerIdentity() {
+    try {
+      final listingBox = Hive.box<Listing>('listingBox');
+      final listingKey = int.tryParse(listingId);
+      if (listingKey != null) {
+        final listing = listingBox.get(listingKey);
+        if (listing != null) {
+          return listing.shouldHideSellerIdentity;
+        }
+      }
+    } catch (e) {
+      // If listing lookup fails, default to showing seller (safer fallback)
+    }
+    return false;
   }
 }

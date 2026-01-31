@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart' hide Order;
 import '../models/order.dart';
 import 'order_details_screen.dart';
 import '../services/order_firestore_service.dart';
+import '../widgets/seller_name_widget.dart';
 
 class BuyerOrdersScreen extends StatefulWidget {
   const BuyerOrdersScreen({super.key});
@@ -321,8 +322,11 @@ class _BuyerOrdersScreenState extends State<BuyerOrdersScreen> {
                           ),
                         ),
                         const SizedBox(height: 4),
-                        Text(
-                          'by ${order.sellerName}',
+                        // Show seller name (blurred before confirmation, clear after) for groceries/vegetables
+                        SellerNameWidget(
+                          sellerName: order.sellerName,
+                          shouldHideSellerIdentity: order.shouldHideSellerIdentity(),
+                          isOrderAccepted: isAccepted,
                           style: TextStyle(
                             fontSize: 13,
                             color: Colors.grey.shade600,
@@ -388,8 +392,11 @@ class _BuyerOrdersScreenState extends State<BuyerOrdersScreen> {
         order.orderStatus == 'Confirmed' ||
         order.orderStatus == 'Completed';
     if (!accepted) {
+      final shouldHideSeller = order.shouldHideSellerIdentity();
       return Text(
-        'Seller contact & pickup location will appear after acceptance.',
+        shouldHideSeller
+            ? 'Seller name, contact & pickup location will appear after acceptance.'
+            : 'Seller contact & pickup location will appear after acceptance.',
         style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
       );
     }
@@ -409,6 +416,11 @@ class _BuyerOrdersScreenState extends State<BuyerOrdersScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Show seller name for groceries/vegetables after acceptance
+            if (order.shouldHideSellerIdentity()) ...[
+              Text('Seller: ${order.sellerName}', style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 4),
+            ],
             if (phone.isNotEmpty)
               Text('Seller phone: $phone', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
             if (pickup.isNotEmpty)
@@ -816,12 +828,22 @@ class _BuyerOrdersContentState extends State<BuyerOrdersContent> {
                           ),
                         ),
                         const SizedBox(height: 4),
-                        Text(
-                          'by ${order.sellerName}',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.grey.shade600,
-                          ),
+                        // Show seller name (blurred before confirmation, clear after) for groceries/vegetables
+                        Builder(
+                          builder: (context) {
+                            final isAccepted = order.orderStatus == 'AcceptedBySeller' ||
+                                order.orderStatus == 'Confirmed' ||
+                                order.orderStatus == 'Completed';
+                            return SellerNameWidget(
+                              sellerName: order.sellerName,
+                              shouldHideSellerIdentity: order.shouldHideSellerIdentity(),
+                              isOrderAccepted: isAccepted,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.grey.shade600,
+                              ),
+                            );
+                          },
                         ),
                         const SizedBox(height: 4),
                         Text(

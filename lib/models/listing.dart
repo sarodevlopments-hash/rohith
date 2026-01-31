@@ -179,4 +179,8 @@ class Listing extends HiveObject {
       currentOrders--;
     }
   }
+
+  /// Returns true if seller identity should be hidden for this listing
+  /// (Groceries and Vegetables should hide seller identity in buyer view)
+  bool get shouldHideSellerIdentity => type.shouldHideSellerIdentity;
 }

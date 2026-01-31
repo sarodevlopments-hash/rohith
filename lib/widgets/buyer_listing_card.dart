@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:ui';
 import 'package:image_picker/image_picker.dart';
 import 'package:hive/hive.dart';
 import '../models/listing.dart';
@@ -109,7 +110,7 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
       }
     }
     // For groceries/vegetables with measurement unit, show "for" format instead of "per"
-    // Use pack size weight if available, otherwise don't show pack size in price
+    // Use pack size weight if available, otherwise show price for 1 unit
     if (widget.listing.type == SellType.groceries || widget.listing.type == SellType.vegetables) {
       if (widget.listing.measurementUnit != null) {
         // If there's a single pack size (even if not using multiple pack sizes feature)
@@ -118,8 +119,8 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
           final label = packSize.getDisplayLabel(widget.listing.measurementUnit!.shortLabel);
           return '₹${packSize.price.toStringAsFixed(0)} for $label';
         }
-        // Don't show pack size if not available - just show price
-        return '₹${widget.listing.price.toStringAsFixed(0)}';
+        // If no pack size, show price for 1 unit of the measurement
+        return '₹${widget.listing.price.toStringAsFixed(0)} for 1 ${widget.listing.measurementUnit!.shortLabel}';
       }
     }
     // Regular items without pack sizes
@@ -500,14 +501,20 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
                               color: Colors.black87,
                             ),
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'by ${widget.listing.sellerName}',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey.shade600,
+                          // Show blurred seller name for groceries and vegetables (always hidden in listing view)
+                          if (widget.listing.shouldHideSellerIdentity) ...[
+                            const SizedBox(height: 4),
+                            _buildBlurredSellerName(),
+                          ] else ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              'by ${widget.listing.sellerName}',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.grey.shade600,
+                              ),
                             ),
-                          ),
+                          ],
                         ],
                       ),
                     ),
@@ -1145,6 +1152,24 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
       final File file = File(imagePath);
       return await file.readAsBytes();
     }
+  }
+
+  Widget _buildBlurredSellerName() {
+    // Create a blurred text effect - make seller name unreadable
+    return ClipRect(
+      child: ImageFiltered(
+        imageFilter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+        child: Container(
+          child: Text(
+            'by ${widget.listing.sellerName}',
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey.shade600,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:ui';
 import 'package:image_picker/image_picker.dart';
 import '../models/listing.dart';
 import '../models/food_category.dart';
@@ -124,13 +125,17 @@ class ConfirmationBottomSheet extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        'by ${listing.sellerName}',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey.shade600,
+                      // Show blurred seller name for groceries and vegetables (always hidden in listing view)
+                      if (listing.shouldHideSellerIdentity)
+                        _buildBlurredSellerName(listing.sellerName)
+                      else
+                        Text(
+                          'by ${listing.sellerName}',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey.shade600,
+                          ),
                         ),
-                      ),
                       const SizedBox(height: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -279,6 +284,24 @@ class ConfirmationBottomSheet extends StatelessWidget {
       final File file = File(imagePath);
       return await file.readAsBytes();
     }
+  }
+
+  Widget _buildBlurredSellerName(String sellerName) {
+    // Create a blurred text effect - make seller name unreadable
+    return ClipRect(
+      child: ImageFiltered(
+        imageFilter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+        child: Container(
+          child: Text(
+            'by $sellerName',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey.shade600,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
