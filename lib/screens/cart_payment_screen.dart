@@ -224,7 +224,7 @@ class _CartPaymentScreenState extends State<CartPaymentScreen> {
         selectedPackLabel: packLabel,
         isLiveKitchenOrder: isLiveKitchenOrder,
         preparationTimeMinutes: isLiveKitchenOrder && firstListing != null 
-            ? firstListing!.preparationTimeMinutes 
+            ? firstListing.preparationTimeMinutes 
             : null,
         statusChangedAt: now,
       );
@@ -327,7 +327,7 @@ class _CartPaymentScreenState extends State<CartPaymentScreen> {
                           const SizedBox(height: 6),
                           Text('Total: ₹${totalPaid.toStringAsFixed(0)}'),
                           const SizedBox(height: 8),
-                          if (!isFinal) const Text('Waiting for seller to accept/reject…'),
+                          if (!isFinal) const Text('Waiting for seller to accept'),
                           if (accepted) const Text('Order accepted ✅'),
                           if (rejected) const Text('Order rejected ❌'),
                           const SizedBox(height: 8),
@@ -375,9 +375,30 @@ class _CartPaymentScreenState extends State<CartPaymentScreen> {
     );
   }
 
+  Listing? _getListing(String listingId) {
+    try {
+      final listingBox = Hive.box<Listing>('listingBox');
+      final listingKey = int.tryParse(listingId);
+      if (listingKey != null) {
+        return listingBox.get(listingKey);
+      }
+    } catch (e) {
+      // Listing might not exist
+    }
+    return null;
+  }
+
+  bool _shouldHideSellerName() {
+    if (widget.items.isEmpty) return false;
+    final firstItem = widget.items.first;
+    final listing = _getListing(firstItem.listingId);
+    return listing != null && listing.shouldHideSellerIdentity;
+  }
+
   @override
   Widget build(BuildContext context) {
     final sellerName = widget.items.isNotEmpty ? widget.items.first.sellerName : 'Seller';
+    final shouldHideSeller = _shouldHideSellerName();
     return Scaffold(
       appBar: AppBar(
         title: const Text('Payment'),
@@ -389,7 +410,7 @@ class _CartPaymentScreenState extends State<CartPaymentScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildSummaryCard(sellerName),
+            _buildSummaryCard(sellerName, shouldHideSeller: shouldHideSeller),
             const SizedBox(height: 16),
             _buildPaymentMethodSelector(),
             const SizedBox(height: 16),
@@ -428,7 +449,7 @@ class _CartPaymentScreenState extends State<CartPaymentScreen> {
     );
   }
 
-  Widget _buildSummaryCard(String sellerName) {
+  Widget _buildSummaryCard(String sellerName, {bool shouldHideSeller = false}) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -439,9 +460,11 @@ class _CartPaymentScreenState extends State<CartPaymentScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Seller: ${sellerName.isEmpty ? 'Seller' : sellerName}',
-              style: const TextStyle(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 10),
+          // Hide seller name for groceries and vegetables
+          if (!shouldHideSeller)
+            Text('Seller: ${sellerName.isEmpty ? 'Seller' : sellerName}',
+                style: const TextStyle(fontWeight: FontWeight.w700)),
+          if (!shouldHideSeller) const SizedBox(height: 10),
           ...widget.items.map((i) => Padding(
                 padding: const EdgeInsets.only(bottom: 6),
                 child: Row(

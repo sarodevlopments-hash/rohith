@@ -57,7 +57,16 @@ class _CartScreenContentState extends State<CartScreenContent> {
   }
 
   int get _totalItemCount => _items.fold<int>(0, (sum, item) => sum + item.quantity);
-  String? get _sellerName => _items.isNotEmpty ? _items.first.sellerName : null;
+  String? get _sellerName {
+    if (_items.isEmpty) return null;
+    // Check if seller should be hidden for the first item (all items in cart are from same seller)
+    final firstItem = _items.first;
+    final listing = _getListing(firstItem.listingId);
+    if (listing != null && listing.shouldHideSellerIdentity) {
+      return null; // Hide seller name for groceries/vegetables
+    }
+    return firstItem.sellerName;
+  }
 
   Future<void> _checkout() async {
     final currentUser = FirebaseAuth.instance.currentUser;

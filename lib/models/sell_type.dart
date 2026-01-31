@@ -52,4 +52,10 @@ extension SellTypeExtension on SellType {
   }
 
   bool get isLiveKitchen => this == SellType.liveKitchen;
+
+  /// Returns true if seller identity should be hidden for this sell type
+  /// (Groceries and Vegetables should hide seller identity)
+  bool get shouldHideSellerIdentity {
+    return this == SellType.groceries || this == SellType.vegetables;
+  }
 }

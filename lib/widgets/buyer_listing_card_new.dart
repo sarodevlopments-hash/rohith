@@ -3,11 +3,14 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:ui';
 import 'package:image_picker/image_picker.dart';
 import 'package:hive/hive.dart';
 import '../models/listing.dart';
 import '../models/food_category.dart';
 import '../models/measurement_unit.dart';
+import '../models/pack_size.dart';
+import '../models/sell_type.dart';
 import '../models/rating.dart';
 import '../screens/cart_screen.dart';
 import '../services/cart_service.dart';
@@ -23,6 +26,7 @@ class BuyerListingCard extends StatefulWidget {
 
 class _BuyerListingCardState extends State<BuyerListingCard> {
   int selectedQuantity = 1;
+  PackSize? selectedPackSize; // Selected pack size for groceries with multiple packs
   double? averageFoodRating;
   double? averageSellerRating;
 
@@ -72,6 +76,34 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
   }
 
   String _getUnitPrice() {
+    // If pack sizes exist, show pack-specific price format
+    if (widget.listing.hasMultiplePackSizes && widget.listing.packSizes != null && widget.listing.packSizes!.isNotEmpty) {
+      if (selectedPackSize != null && widget.listing.measurementUnit != null) {
+        final label = selectedPackSize!.getDisplayLabel(widget.listing.measurementUnit!.shortLabel);
+        return '₹${selectedPackSize!.price.toStringAsFixed(0)} for $label';
+      }
+      // If no pack selected but packs exist, show first pack as example or prompt
+      final firstPack = widget.listing.packSizes!.first;
+      if (widget.listing.measurementUnit != null) {
+        final label = firstPack.getDisplayLabel(widget.listing.measurementUnit!.shortLabel);
+        return 'Select pack size (e.g., ₹${firstPack.price.toStringAsFixed(0)} for $label)';
+      }
+    }
+    // For groceries/vegetables with measurement unit, show "for" format instead of "per"
+    // Use pack size weight if available, otherwise show price for 1 unit
+    if (widget.listing.type == SellType.groceries || widget.listing.type == SellType.vegetables) {
+      if (widget.listing.measurementUnit != null) {
+        // If there's a single pack size (even if not using multiple pack sizes feature)
+        if (widget.listing.packSizes != null && widget.listing.packSizes!.isNotEmpty) {
+          final packSize = widget.listing.packSizes!.first;
+          final label = packSize.getDisplayLabel(widget.listing.measurementUnit!.shortLabel);
+          return '₹${packSize.price.toStringAsFixed(0)} for $label';
+        }
+        // If no pack size, show price for 1 unit of the measurement
+        return '₹${widget.listing.price.toStringAsFixed(0)} for 1 ${widget.listing.measurementUnit!.shortLabel}';
+      }
+    }
+    // Regular items without pack sizes
     if (widget.listing.measurementUnit != null) {
       return '₹${widget.listing.price.toStringAsFixed(0)} per ${widget.listing.measurementUnit!.shortLabel}';
     }
@@ -323,14 +355,20 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
                               color: Colors.black87,
                             ),
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'by ${widget.listing.sellerName}',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey.shade600,
+                          // Show blurred seller name for groceries and vegetables (always hidden in listing view)
+                          if (widget.listing.shouldHideSellerIdentity) ...[
+                            const SizedBox(height: 4),
+                            _buildBlurredSellerName(),
+                          ] else ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              'by ${widget.listing.sellerName}',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.grey.shade600,
+                              ),
                             ),
-                          ),
+                          ],
                         ],
                       ),
                     ),
@@ -567,6 +605,24 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
       final File file = File(imagePath);
       return await file.readAsBytes();
     }
+  }
+
+  Widget _buildBlurredSellerName() {
+    // Create a blurred text effect - make seller name unreadable
+    return ClipRect(
+      child: ImageFiltered(
+        imageFilter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+        child: Container(
+          child: Text(
+            'by ${widget.listing.sellerName}',
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey.shade600,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

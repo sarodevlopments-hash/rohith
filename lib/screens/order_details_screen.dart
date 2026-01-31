@@ -12,6 +12,7 @@ import '../models/listing.dart';
 import '../models/measurement_unit.dart';
 import '../services/order_firestore_service.dart';
 import '../services/seller_profile_service.dart';
+import '../widgets/seller_name_widget.dart';
 
 class OrderDetailsScreen extends StatelessWidget {
   final Order order;
@@ -175,8 +176,12 @@ class OrderDetailsScreen extends StatelessWidget {
                     ),
                   ],
                   const SizedBox(height: 8),
-                  Text(
-                    'by ${order.sellerName}',
+                  // Show seller name (blurred before confirmation, clear after) for groceries/vegetables
+                  // Always show clear for other types
+                  SellerNameWidget(
+                    sellerName: order.sellerName,
+                    shouldHideSellerIdentity: order.shouldHideSellerIdentity(),
+                    isOrderAccepted: isAccepted,
                     style: TextStyle(
                       fontSize: 16,
                       color: Colors.grey.shade600,
@@ -338,8 +343,12 @@ class OrderDetailsScreen extends StatelessWidget {
         } else {
           // Buyer view: Only show seller details after acceptance
           if (!finalIsAccepted) {
+            // For groceries/vegetables, also mention seller name will be visible
+            final shouldHideSeller = order.shouldHideSellerIdentity();
             return Text(
-              'Seller phone & pickup location will be visible after the seller accepts.',
+              shouldHideSeller
+                  ? 'Seller name, phone & pickup location will be visible after the seller accepts.'
+                  : 'Seller phone & pickup location will be visible after the seller accepts.',
               style: TextStyle(color: Colors.grey.shade700),
             );
           }
@@ -349,12 +358,21 @@ class OrderDetailsScreen extends StatelessWidget {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Show seller name for groceries/vegetables after acceptance
+              if (order.shouldHideSellerIdentity()) ...[
+                _buildDetailRow(
+                  Icons.person,
+                  'Seller Name',
+                  order.sellerName,
+                ),
+                const SizedBox(height: 12),
+              ],
               if (sellerPhone.isNotEmpty) _buildPhoneRowWithCallLink(sellerPhone),
               if (pickup.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 _buildLocationRowWithMapLink(pickup),
               ],
-              if (sellerPhone.isEmpty && pickup.isEmpty)
+              if (sellerPhone.isEmpty && pickup.isEmpty && !order.shouldHideSellerIdentity())
                 Text('Seller details not available', style: TextStyle(color: Colors.grey.shade700)),
             ],
           );
