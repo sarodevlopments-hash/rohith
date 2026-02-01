@@ -14,7 +14,7 @@ enum SellType {
   vegetables,
 
   @HiveField(3)
-  medicine,
+  clothingAndApparel,
 
   @HiveField(4)
   liveKitchen, // Live Kitchen - cook on demand, real-time ordering
@@ -29,8 +29,8 @@ extension SellTypeExtension on SellType {
         return 'Groceries';
       case SellType.vegetables:
         return 'Vegetables';
-      case SellType.medicine:
-        return 'Medicine';
+      case SellType.clothingAndApparel:
+        return 'Clothing and Apparel';
       case SellType.liveKitchen:
         return 'Live Kitchen';
     }
@@ -44,8 +44,8 @@ extension SellTypeExtension on SellType {
         return 'Grocery items';
       case SellType.vegetables:
         return 'Fresh vegetables';
-      case SellType.medicine:
-        return 'Medical items';
+      case SellType.clothingAndApparel:
+        return 'Clothing and apparel items';
       case SellType.liveKitchen:
         return 'Cook on demand - real-time orders';
     }

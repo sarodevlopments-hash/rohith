@@ -165,8 +165,67 @@ class OrderDetailsScreen extends StatelessWidget {
                       color: Colors.black87,
                     ),
                   ),
+                  // Show size and color prominently if available
+                  if ((order.selectedSize != null && order.selectedSize!.isNotEmpty) ||
+                      (order.selectedColor != null && order.selectedColor!.isNotEmpty)) ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 8,
+                      children: [
+                        if (order.selectedSize != null && order.selectedSize!.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.blue.shade200),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.straighten, size: 16, color: Colors.blue.shade700),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Size: ${order.selectedSize}',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.blue.shade700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (order.selectedColor != null && order.selectedColor!.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.purple.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.purple.shade200),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.palette, size: 16, color: Colors.purple.shade700),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Color: ${order.selectedColor}',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.purple.shade700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
                   if (order.selectedPackQuantity != null && order.selectedPackLabel != null) ...[
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 8),
                     Text(
                       'Pack Size: ${order.selectedPackLabel}',
                       style: TextStyle(
@@ -189,6 +248,46 @@ class OrderDetailsScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 24),
 
+                  // Product Details Section
+                  const Text(
+                    'Product Details',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  // Size (for clothing items)
+                  if (order.selectedSize != null && order.selectedSize!.isNotEmpty)
+                    _buildDetailRow(
+                      Icons.straighten,
+                      'Size',
+                      order.selectedSize!,
+                    ),
+                  if (order.selectedSize != null && order.selectedSize!.isNotEmpty)
+                    const SizedBox(height: 16),
+                  
+                  // Color (for clothing items)
+                  if (order.selectedColor != null && order.selectedColor!.isNotEmpty)
+                    _buildDetailRow(
+                      Icons.palette,
+                      'Color',
+                      order.selectedColor!,
+                    ),
+                  if (order.selectedColor != null && order.selectedColor!.isNotEmpty)
+                    const SizedBox(height: 16),
+                  
+                  // Payment Method
+                  if (order.paymentMethod != null && order.paymentMethod!.isNotEmpty)
+                    _buildDetailRow(
+                      Icons.payment,
+                      'Payment Mode',
+                      order.paymentMethod!,
+                    ),
+                  if (order.paymentMethod != null && order.paymentMethod!.isNotEmpty)
+                    const SizedBox(height: 16),
+                  
                   // Order Date & Time
                   _buildDetailRow(
                     Icons.calendar_today,

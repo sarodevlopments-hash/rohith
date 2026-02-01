@@ -1,50 +1,55 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-part of 'sell_type.dart';
+part of 'clothing_category.dart';
 
 // **************************************************************************
 // TypeAdapterGenerator
 // **************************************************************************
 
-class SellTypeAdapter extends TypeAdapter<SellType> {
+class ClothingCategoryAdapter extends TypeAdapter<ClothingCategory> {
   @override
-  final int typeId = 4;
+  final int typeId = 18;
 
   @override
-  SellType read(BinaryReader reader) {
+  ClothingCategory read(BinaryReader reader) {
     switch (reader.readByte()) {
       case 0:
-        return SellType.cookedFood;
+        return ClothingCategory.men;
       case 1:
-        return SellType.groceries;
+        return ClothingCategory.women;
       case 2:
-        return SellType.vegetables;
+        return ClothingCategory.baby;
       case 3:
-        return SellType.clothingAndApparel;
+        return ClothingCategory.boy;
       case 4:
-        return SellType.liveKitchen;
+        return ClothingCategory.girl;
+      case 5:
+        return ClothingCategory.unisex;
       default:
-        return SellType.cookedFood;
+        return ClothingCategory.men;
     }
   }
 
   @override
-  void write(BinaryWriter writer, SellType obj) {
+  void write(BinaryWriter writer, ClothingCategory obj) {
     switch (obj) {
-      case SellType.cookedFood:
+      case ClothingCategory.men:
         writer.writeByte(0);
         break;
-      case SellType.groceries:
+      case ClothingCategory.women:
         writer.writeByte(1);
         break;
-      case SellType.vegetables:
+      case ClothingCategory.baby:
         writer.writeByte(2);
         break;
-      case SellType.clothingAndApparel:
+      case ClothingCategory.boy:
         writer.writeByte(3);
         break;
-      case SellType.liveKitchen:
+      case ClothingCategory.girl:
         writer.writeByte(4);
+        break;
+      case ClothingCategory.unisex:
+        writer.writeByte(5);
         break;
     }
   }
@@ -55,7 +60,7 @@ class SellTypeAdapter extends TypeAdapter<SellType> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is SellTypeAdapter &&
+      other is ClothingCategoryAdapter &&
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }

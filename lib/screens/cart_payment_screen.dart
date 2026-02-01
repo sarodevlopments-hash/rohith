@@ -227,6 +227,8 @@ class _CartPaymentScreenState extends State<CartPaymentScreen> {
             ? firstListing.preparationTimeMinutes 
             : null,
         statusChangedAt: now,
+        selectedSize: firstItem.selectedSize,
+        selectedColor: firstItem.selectedColor,
       );
       await ordersBox.add(order);
 

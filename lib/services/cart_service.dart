@@ -14,6 +14,8 @@ class CartItemData {
   final String? imagePath;
   final String? measurementUnitLabel;
   final PackSize? selectedPackSize; // Selected pack size for groceries
+  final String? selectedSize; // Selected size for clothing
+  final String? selectedColor; // Selected color for clothing
 
   CartItemData({
     required this.listingId,
@@ -26,6 +28,8 @@ class CartItemData {
     this.imagePath,
     this.measurementUnitLabel,
     this.selectedPackSize,
+    this.selectedSize,
+    this.selectedColor,
   });
 
   double get total => price * quantity;
@@ -44,6 +48,8 @@ class CartItemData {
       'selectedPackQuantity': selectedPackSize?.quantity,
       'selectedPackPrice': selectedPackSize?.price,
       'selectedPackLabel': selectedPackSize?.label,
+      'selectedSize': selectedSize,
+      'selectedColor': selectedColor,
     };
   }
 
@@ -67,10 +73,12 @@ class CartItemData {
       imagePath: map['imagePath'] as String?,
       measurementUnitLabel: map['measurementUnitLabel'] as String?,
       selectedPackSize: packSize,
+      selectedSize: map['selectedSize'] as String?,
+      selectedColor: map['selectedColor'] as String?,
     );
   }
 
-  CartItemData copyWith({int? quantity, PackSize? selectedPackSize}) {
+  CartItemData copyWith({int? quantity, PackSize? selectedPackSize, String? selectedSize, String? selectedColor}) {
     return CartItemData(
       listingId: listingId,
       sellerId: sellerId,
@@ -82,6 +90,8 @@ class CartItemData {
       imagePath: imagePath,
       measurementUnitLabel: measurementUnitLabel,
       selectedPackSize: selectedPackSize ?? this.selectedPackSize,
+      selectedSize: selectedSize ?? this.selectedSize,
+      selectedColor: selectedColor ?? this.selectedColor,
     );
   }
 }
@@ -110,7 +120,7 @@ class CartService {
     _box.clear();
   }
 
-  static Future<void> addItem(Listing listing, int qty, {PackSize? packSize}) async {
+  static Future<void> addItem(Listing listing, int qty, {PackSize? packSize, String? selectedSize, String? selectedColor}) async {
     final key = listing.key.toString();
     final existingIndex = _box.keys.toList().indexWhere((k) => k.toString() == key);
     
@@ -120,14 +130,16 @@ class CartService {
     
     if (existingIndex != -1) {
       final existing = CartItemData.fromMap(Map<String, dynamic>.from(_box.get(key)));
-      // Only update if pack size matches, otherwise treat as different item
+      // Only update if pack size, size, and color match, otherwise treat as different item
       if (existing.selectedPackSize?.quantity == selectedPack?.quantity &&
-          existing.selectedPackSize?.price == selectedPack?.price) {
+          existing.selectedPackSize?.price == selectedPack?.price &&
+          existing.selectedSize == selectedSize &&
+          existing.selectedColor == selectedColor) {
         final updated = existing.copyWith(quantity: existing.quantity + qty);
         await _box.put(key, updated.toMap());
       } else {
-        // Different pack size - add as separate item with modified key
-        final newKey = '${key}_${selectedPack?.quantity ?? 0}_${selectedPack?.price ?? 0}';
+        // Different pack size/size/color - add as separate item with modified key
+        final newKey = '${key}_${selectedPack?.quantity ?? 0}_${selectedPack?.price ?? 0}_${selectedSize ?? ''}_${selectedColor ?? ''}';
         final unitLabel = listing.measurementUnit?.shortLabel;
         final item = CartItemData(
           listingId: key, // Keep original listing ID for reference
@@ -140,6 +152,8 @@ class CartService {
           imagePath: listing.imagePath,
           measurementUnitLabel: unitLabel,
           selectedPackSize: selectedPack,
+          selectedSize: selectedSize,
+          selectedColor: selectedColor,
         );
         await _box.put(newKey, item.toMap());
       }
@@ -156,6 +170,8 @@ class CartService {
         imagePath: listing.imagePath,
         measurementUnitLabel: unitLabel,
         selectedPackSize: selectedPack,
+        selectedSize: selectedSize,
+        selectedColor: selectedColor,
       );
       await _box.put(key, item.toMap());
     }

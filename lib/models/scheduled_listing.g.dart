@@ -16,7 +16,7 @@ class ScheduledListingAdapter extends TypeAdapter<ScheduledListing> {
     final fields = <int, dynamic>{
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
-    return ScheduledListing._internal(
+    return ScheduledListing.fromHive(
       scheduledId: fields[0] as String,
       listingData: fields[1] as Listing,
       scheduleType: fields[2] as ScheduleType,

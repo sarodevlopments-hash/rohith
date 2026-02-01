@@ -11,6 +11,8 @@ import 'dart:async';
 import '../models/listing.dart';
 import '../models/sell_type.dart';
 import '../models/food_category.dart';
+import '../models/clothing_category.dart';
+import '../models/size_color_combination.dart';
 import '../models/cooked_food_source.dart';
 import '../models/measurement_unit.dart';
 import '../models/pack_size.dart';
@@ -46,6 +48,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
   final quantityController = TextEditingController(); // Stock quantity (number of items/packs)
   final packSizeWeightController = TextEditingController(); // Pack size weight for groceries without multiple packs
   final fssaiController = TextEditingController();
+  final descriptionController = TextEditingController(); // Product description
   final placeSearchController = TextEditingController();
   final List<String> _placeSearchResults = [];
   Timer? _placeSearchDebounce;
@@ -68,13 +71,26 @@ class _AddListingScreenState extends State<AddListingScreen> {
   SellType selectedType = SellType.cookedFood;
   CookedFoodSource? selectedCookedFoodSource;
   FoodCategory selectedCategory = FoodCategory.veg;
+  ClothingCategory? selectedClothingCategory;
   MeasurementUnit? selectedMeasurementUnit;
   DateTime? preparedAt;
   DateTime? expiryDate;
+  List<String> availableSizes = []; // Available sizes for clothing (deprecated, use sizeColorCombinations)
+  List<String> availableColors = []; // Available colors for clothing (deprecated, use sizeColorCombinations)
+  final sizeTextController = TextEditingController(); // For adding new size
+  final colorTextController = TextEditingController(); // For adding new color
+  List<SizeColorCombination> sizeColorCombinations = []; // Size-color combinations
+  String? editingSize; // Currently editing size for color selection
+  final Map<int, TextEditingController> colorControllers = {}; // Controllers for each size's color input
   PlatformFile? fssaiLicenseFile;
   File? productImage;
   String? productImagePath;
   Uint8List? productImageBytes; // For web storage
+  // Color-specific images: Map of color name to image path/bytes
+  final Map<String, String> colorImagePaths = {}; // Color name -> image path
+  final Map<String, File?> colorImageFiles = {}; // Color name -> File (for mobile)
+  final Map<String, Uint8List?> colorImageBytes = {}; // Color name -> bytes (for web)
+  String? defaultColorImage; // Color name that is set as default product image
 
   bool isSubmitting = false;
   bool isFetchingLocation = false;
@@ -386,9 +402,17 @@ class _AddListingScreenState extends State<AddListingScreen> {
         sellerFssaiController.clear();
         fssaiLicenseFile = null;
       }
-      if (selectedType == SellType.vegetables || selectedType == SellType.medicine || selectedType == SellType.groceries) {
+      if (selectedType == SellType.vegetables || selectedType == SellType.clothingAndApparel || selectedType == SellType.groceries) {
         if (selectedType != SellType.groceries) {
           selectedCategory = FoodCategory.veg;
+        }
+        if (selectedType == SellType.clothingAndApparel) {
+          selectedClothingCategory ??= ClothingCategory.unisex; // Default to unisex
+        } else {
+          selectedClothingCategory = null;
+          availableSizes.clear();
+          availableColors.clear();
+          sizeColorCombinations.clear();
         }
         preparedAt = null;
         expiryDate = null;
@@ -864,6 +888,71 @@ class _AddListingScreenState extends State<AddListingScreen> {
     }
   }
 
+  Future<void> _pickColorImage(String colorName) async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+        maxWidth: 1200,
+      );
+
+      if (image != null) {
+        if (kIsWeb) {
+          // For web: Read bytes and store path
+          final Uint8List bytes = await image.readAsBytes();
+          setState(() {
+            colorImagePaths[colorName] = image.path; // Web path
+            colorImageBytes[colorName] = bytes;
+            // Auto-set as default if no default is set yet
+            if (defaultColorImage == null) {
+              defaultColorImage = colorName;
+              productImagePath = image.path;
+              productImageBytes = bytes;
+            }
+          });
+        } else {
+          // For mobile: Save image to app directory
+          final Directory appDir = await getApplicationDocumentsDirectory();
+          final String fileName = '${colorName}_${DateTime.now().millisecondsSinceEpoch}_${path.basename(image.path)}';
+          final String savedPath = path.join(appDir.path, 'product_images', 'colors', fileName);
+          
+          // Create directory if it doesn't exist
+          final Directory imageDir = Directory(path.dirname(savedPath));
+          if (!await imageDir.exists()) {
+            await imageDir.create(recursive: true);
+          }
+
+          // Copy file
+          final File savedFile = await File(image.path).copy(savedPath);
+          
+          setState(() {
+            colorImageFiles[colorName] = savedFile;
+            colorImagePaths[colorName] = savedPath;
+            // Auto-set as default if no default is set yet
+            if (defaultColorImage == null) {
+              defaultColorImage = colorName;
+              productImagePath = savedPath;
+              productImage = savedFile;
+            }
+          });
+        }
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Image added for $colorName${defaultColorImage == colorName ? ' (set as default)' : ''}')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error picking image: $e')),
+        );
+      }
+    }
+  }
+
   Future<void> _pickFssaiLicense() async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -998,6 +1087,36 @@ class _AddListingScreenState extends State<AddListingScreen> {
     quantityController.text = listing.quantity.toString();
     selectedType = listing.type;
     selectedCategory = listing.category;
+    selectedClothingCategory = listing.clothingCategory;
+    descriptionController.text = listing.description ?? '';
+    availableSizes = listing.availableSizes ?? [];
+    availableColors = listing.availableColors ?? [];
+    sizeColorCombinations = listing.sizeColorCombinations ?? [];
+    // Load color images
+    if (listing.colorImages != null) {
+      colorImagePaths.clear();
+      colorImageFiles.clear();
+      colorImageBytes.clear();
+      for (final entry in listing.colorImages!.entries) {
+        colorImagePaths[entry.key] = entry.value;
+        if (kIsWeb) {
+          // For web, try to load bytes
+          try {
+            final XFile file = XFile(entry.value);
+            final bytes = await file.readAsBytes();
+            colorImageBytes[entry.key] = bytes;
+          } catch (e) {
+            // If loading fails, keep the path
+          }
+        } else {
+          // For mobile, check if file exists
+          final file = File(entry.value);
+          if (file.existsSync()) {
+            colorImageFiles[entry.key] = file;
+          }
+        }
+      }
+    }
     selectedCookedFoodSource = listing.cookedFoodSource;
     selectedMeasurementUnit = listing.measurementUnit;
     // Don't auto-fill dates - seller needs to set them manually
@@ -1121,12 +1240,22 @@ class _AddListingScreenState extends State<AddListingScreen> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
-    // Validate product image
+    // Validate product image (for clothing, allow default color image instead)
     if (productImagePath == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please upload a product image')),
-      );
-      return;
+      if (selectedType == SellType.clothingAndApparel && defaultColorImage != null && colorImagePaths.containsKey(defaultColorImage)) {
+        // Use default color image as product image
+        productImagePath = colorImagePaths[defaultColorImage];
+        if (kIsWeb) {
+          productImageBytes = colorImageBytes[defaultColorImage];
+        } else {
+          productImage = colorImageFiles[defaultColorImage];
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please upload a product image or set a default color image')),
+        );
+        return;
+      }
     }
 
     // Validate seller profile for first-time sellers
@@ -1207,7 +1336,9 @@ class _AddListingScreenState extends State<AddListingScreen> {
         expiryDate: (selectedType == SellType.vegetables || selectedType == SellType.groceries || selectedType == SellType.liveKitchen) ? null : expiryDate,
         category: selectedCategory,
         cookedFoodSource: selectedCookedFoodSource,
-        imagePath: productImagePath,
+        imagePath: productImagePath ?? (selectedType == SellType.clothingAndApparel && defaultColorImage != null 
+            ? colorImagePaths[defaultColorImage] 
+            : null),
         measurementUnit: (selectedType == SellType.vegetables || 
                           selectedType == SellType.groceries)
             ? selectedMeasurementUnit
@@ -1228,6 +1359,12 @@ class _AddListingScreenState extends State<AddListingScreen> {
         maxCapacity: (selectedType == SellType.liveKitchen && maxCapacityController.text.isNotEmpty)
             ? int.tryParse(maxCapacityController.text)
             : null,
+        clothingCategory: selectedType == SellType.clothingAndApparel ? selectedClothingCategory : null,
+        description: descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim(),
+        availableSizes: selectedType == SellType.clothingAndApparel && availableSizes.isNotEmpty ? availableSizes : null,
+        availableColors: selectedType == SellType.clothingAndApparel && availableColors.isNotEmpty ? availableColors : null,
+        sizeColorCombinations: selectedType == SellType.clothingAndApparel && sizeColorCombinations.isNotEmpty ? sizeColorCombinations : null,
+        colorImages: selectedType == SellType.clothingAndApparel && colorImagePaths.isNotEmpty ? colorImagePaths : null,
       );
 
       final error = ListingValidator.validate(listing);
@@ -1436,31 +1573,47 @@ class _AddListingScreenState extends State<AddListingScreen> {
     }
   }
 
-  Widget _buildSectionTitle(String title, {IconData? icon, Color? iconColor}) {
+  Widget _buildSectionTitle(String title, {IconData? icon, Color? iconColor, String? subtitle}) {
     return Padding(
       padding: const EdgeInsets.only(top: 24, bottom: 16),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (icon != null) ...[
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: (iconColor ?? Colors.orange).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
+          Row(
+            children: [
+              if (icon != null) ...[
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: (iconColor ?? Colors.orange).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icon, color: iconColor ?? Colors.orange, size: 20),
+                ),
+                const SizedBox(width: 12),
+              ],
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                  letterSpacing: 0.5,
+                ),
               ),
-              child: Icon(icon, color: iconColor ?? Colors.orange, size: 20),
-            ),
-            const SizedBox(width: 12),
-          ],
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-              letterSpacing: 0.5,
-            ),
+            ],
           ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade600,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -2630,9 +2783,381 @@ class _AddListingScreenState extends State<AddListingScreen> {
               ),
             ],
 
-            // Product Image (Mandatory)
-            _buildSectionTitle("Product Image", icon: Icons.image, iconColor: Colors.pink),
+            // Clothing Category
+            if (selectedType == SellType.clothingAndApparel) ...[
+              _buildSectionTitle("Clothing Category", icon: Icons.checkroom, iconColor: Colors.purple),
+              _buildCard(
+                DropdownButtonFormField<ClothingCategory>(
+                  value: selectedClothingCategory,
+                  decoration: InputDecoration(
+                    labelText: "Select Category",
+                    prefixIcon: const Icon(Icons.category),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    filled: true,
+                    fillColor: Colors.grey.shade50,
+                  ),
+                  items: ClothingCategory.values.map((c) {
+                    return DropdownMenuItem(
+                      value: c,
+                      child: Row(
+                        children: [
+                          Text(c.icon, style: const TextStyle(fontSize: 20)),
+                          const SizedBox(width: 12),
+                          Text(c.label),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (v) => setState(() => selectedClothingCategory = v),
+                ),
+              ),
+            ],
+
+            // Size-Color Combinations (for clothing and apparel)
+            if (selectedType == SellType.clothingAndApparel) ...[
+              _buildSectionTitle("Size & Color Combinations", icon: Icons.style, iconColor: Colors.teal),
+              _buildCard(
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Configure which colors are available for each size",
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade600,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Add Size Section
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: sizeTextController,
+                                decoration: InputDecoration(
+                                  labelText: "Add Size",
+                                  hintText: "e.g., S, M, L, XL, Free Size",
+                                  prefixIcon: const Icon(Icons.straighten),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                onSubmitted: (value) {
+                                  if (value.trim().isNotEmpty) {
+                                    final size = value.trim();
+                                    // Check if size already exists
+                                    if (!sizeColorCombinations.any((combo) => combo.size == size)) {
+                                      setState(() {
+                                        sizeColorCombinations.add(SizeColorCombination(
+                                          size: size,
+                                          availableColors: [],
+                                        ));
+                                        sizeTextController.clear();
+                                      });
+                                    }
+                                  }
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              icon: const Icon(Icons.add_circle),
+                              color: Colors.teal,
+                              onPressed: () {
+                                final size = sizeTextController.text.trim();
+                                if (size.isNotEmpty) {
+                                  if (!sizeColorCombinations.any((combo) => combo.size == size)) {
+                                    setState(() {
+                                      sizeColorCombinations.add(SizeColorCombination(
+                                        size: size,
+                                        availableColors: [],
+                                      ));
+                                      sizeTextController.clear();
+                                    });
+                                  }
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        // Quick add "Free Size" button
+                        if (!sizeColorCombinations.any((combo) => combo.size.toLowerCase() == 'free size'))
+                          OutlinedButton.icon(
+                            onPressed: () {
+                              setState(() {
+                                sizeColorCombinations.add(SizeColorCombination(
+                                  size: 'Free Size',
+                                  availableColors: [],
+                                ));
+                              });
+                            },
+                            icon: const Icon(Icons.check_circle_outline, size: 18),
+                            label: const Text('Add Free Size'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.teal,
+                              side: BorderSide(color: Colors.teal.shade300),
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    // Size-Color Combinations List
+                    if (sizeColorCombinations.isNotEmpty) ...[
+                      ...sizeColorCombinations.asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final combo = entry.value;
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 16),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue.shade600,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      combo.size,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete, color: Colors.red),
+                                    onPressed: () {
+                                      setState(() {
+                                        sizeColorCombinations.removeAt(index);
+                                      });
+                                    },
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                "Available Colors for ${combo.size}:",
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey.shade700,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  ...combo.availableColors.map((color) {
+                                    final hasImage = colorImagePaths.containsKey(color) && 
+                                                    (kIsWeb ? colorImageBytes[color] != null : 
+                                                     colorImageFiles[color] != null && 
+                                                     colorImageFiles[color]!.existsSync());
+                                    return Container(
+                                      decoration: BoxDecoration(
+                                        color: hasImage ? Colors.green.shade50 : Colors.grey.shade100,
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(
+                                          color: hasImage ? Colors.green.shade300 : Colors.grey.shade300,
+                                          width: hasImage ? 2 : 1,
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          // Image upload button
+                                          IconButton(
+                                            icon: Icon(
+                                              hasImage ? Icons.check_circle : Icons.add_photo_alternate,
+                                              size: 18,
+                                              color: hasImage ? Colors.green.shade700 : Colors.grey.shade600,
+                                            ),
+                                            onPressed: () => _pickColorImage(color),
+                                            tooltip: hasImage ? 'Change image' : 'Add image for $color',
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(),
+                                          ),
+                                          // Color name
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                                            child: Text(
+                                              color,
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: hasImage ? FontWeight.w600 : FontWeight.normal,
+                                              ),
+                                            ),
+                                          ),
+                                          // Set as default button (only show if image exists)
+                                          if (hasImage)
+                                            IconButton(
+                                              icon: Icon(
+                                                defaultColorImage == color ? Icons.star : Icons.star_border,
+                                                size: 18,
+                                                color: defaultColorImage == color ? Colors.amber.shade700 : Colors.grey.shade600,
+                                              ),
+                                              onPressed: () {
+                                                setState(() {
+                                                  defaultColorImage = defaultColorImage == color ? null : color;
+                                                  // Update productImagePath to use default color image
+                                                  if (defaultColorImage != null && colorImagePaths.containsKey(defaultColorImage)) {
+                                                    productImagePath = colorImagePaths[defaultColorImage];
+                                                    if (kIsWeb) {
+                                                      productImageBytes = colorImageBytes[defaultColorImage];
+                                                    } else {
+                                                      productImage = colorImageFiles[defaultColorImage];
+                                                    }
+                                                  }
+                                                });
+                                              },
+                                              tooltip: defaultColorImage == color ? 'Default image (tap to remove)' : 'Set as default product image',
+                                              padding: EdgeInsets.zero,
+                                              constraints: const BoxConstraints(),
+                                            ),
+                                          // Delete button
+                                          IconButton(
+                                            icon: const Icon(Icons.close, size: 18),
+                                            onPressed: () {
+                                              setState(() {
+                                                final updatedColors = List<String>.from(combo.availableColors);
+                                                updatedColors.remove(color);
+                                                sizeColorCombinations[index] = SizeColorCombination(
+                                                  size: combo.size,
+                                                  availableColors: updatedColors,
+                                                );
+                                                // Remove color image when color is removed
+                                                colorImagePaths.remove(color);
+                                                colorImageFiles.remove(color);
+                                                colorImageBytes.remove(color);
+                                                // If this was the default, clear it
+                                                if (defaultColorImage == color) {
+                                                  defaultColorImage = null;
+                                                  productImagePath = null;
+                                                  productImage = null;
+                                                  productImageBytes = null;
+                                                }
+                                              });
+                                            },
+                                            tooltip: 'Remove color',
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }),
+                                  Builder(
+                                    builder: (context) {
+                                      // Get or create controller for this size
+                                      if (!colorControllers.containsKey(index)) {
+                                        colorControllers[index] = TextEditingController();
+                                      }
+                                      return SizedBox(
+                                        width: 120,
+                                        child: TextField(
+                                          controller: colorControllers[index],
+                                          decoration: InputDecoration(
+                                            hintText: "Add color",
+                                            hintStyle: TextStyle(fontSize: 11),
+                                            border: OutlineInputBorder(
+                                              borderRadius: BorderRadius.circular(20),
+                                            ),
+                                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                          ),
+                                          style: const TextStyle(fontSize: 11),
+                                          onSubmitted: (value) {
+                                            if (value.trim().isNotEmpty && !combo.availableColors.contains(value.trim())) {
+                                              setState(() {
+                                                final updatedColors = List<String>.from(combo.availableColors);
+                                                updatedColors.add(value.trim());
+                                                sizeColorCombinations[index] = SizeColorCombination(
+                                                  size: combo.size,
+                                                  availableColors: updatedColors,
+                                                );
+                                                colorControllers[index]?.clear();
+                                              });
+                                            }
+                                          },
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                    ] else ...[
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Center(
+                          child: Text(
+                            "Add sizes and configure available colors for each size",
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey.shade600,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+
+            // Product Description (for all items, especially useful for clothing)
+            _buildSectionTitle("Product Description", icon: Icons.description, iconColor: Colors.blue),
             _buildCard(
+              TextFormField(
+                controller: descriptionController,
+                maxLines: 5,
+                decoration: InputDecoration(
+                  labelText: "Describe your product (Brand, Material, Size, Features, etc.)",
+                  hintText: "E.g., Premium cotton sweatshirt from XYZ brand. Available in sizes S, M, L, XL. Soft fabric, perfect for casual wear...",
+                  prefixIcon: const Icon(Icons.edit_note),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey.shade50,
+                ),
+                textCapitalization: TextCapitalization.sentences,
+              ),
+            ),
+
+            // Product Image (Mandatory for non-clothing, optional for clothing if default color image is set)
+            if (selectedType != SellType.clothingAndApparel || defaultColorImage == null) ...[
+              _buildSectionTitle(
+                "Product Image", 
+                icon: Icons.image, 
+                iconColor: Colors.pink,
+                subtitle: selectedType == SellType.clothingAndApparel 
+                    ? "Or set a default image from color images above" 
+                    : null,
+              ),
+              _buildCard(
               Column(
                 children: [
                   GestureDetector(
@@ -2746,16 +3271,17 @@ class _AddListingScreenState extends State<AddListingScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: Colors.red.shade50,
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Text(
-                                    "* Required",
-                                    style: TextStyle(
-                                      color: Colors.red.shade700,
+                                if (selectedType != SellType.clothingAndApparel || defaultColorImage == null)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.red.shade50,
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Text(
+                                      "* Required",
+                                      style: TextStyle(
+                                        color: Colors.red.shade700,
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600,
                                     ),
@@ -2768,9 +3294,10 @@ class _AddListingScreenState extends State<AddListingScreen> {
                 ],
               ),
             ),
+            ],
 
-            // Time (Not for vegetables, groceries, or live kitchen)
-            if (selectedType != SellType.vegetables && selectedType != SellType.groceries && selectedType != SellType.liveKitchen) ...[
+            // Time (Not for vegetables, groceries, clothing and apparel, or live kitchen)
+            if (selectedType != SellType.vegetables && selectedType != SellType.groceries && selectedType != SellType.clothingAndApparel && selectedType != SellType.liveKitchen) ...[
               _buildSectionTitle("Time Information", icon: Icons.access_time, iconColor: Colors.indigo),
               _buildCard(
                 Column(
