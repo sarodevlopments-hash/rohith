@@ -68,6 +68,41 @@ class ScheduledListing extends HiveObject {
        scheduleCloseTimeHour = scheduleCloseTime?.hour,
        scheduleCloseTimeMinute = scheduleCloseTime?.minute;
 
+  // Factory constructor for Hive deserialization (uses raw hour/minute values)
+  factory ScheduledListing.fromHive({
+    required String scheduledId,
+    required Listing listingData,
+    required ScheduleType scheduleType,
+    required DateTime scheduleStartDate,
+    DateTime? scheduleEndDate,
+    required int scheduleTimeHour,
+    required int scheduleTimeMinute,
+    int? scheduleCloseTimeHour,
+    int? scheduleCloseTimeMinute,
+    int? dayOfWeek,
+    required String sellerId,
+    DateTime? lastPostedAt,
+    bool isActive = true,
+    required DateTime createdAt,
+  }) {
+    return ScheduledListing._internal(
+      scheduledId: scheduledId,
+      listingData: listingData,
+      scheduleType: scheduleType,
+      scheduleStartDate: scheduleStartDate,
+      scheduleEndDate: scheduleEndDate,
+      scheduleTimeHour: scheduleTimeHour,
+      scheduleTimeMinute: scheduleTimeMinute,
+      scheduleCloseTimeHour: scheduleCloseTimeHour,
+      scheduleCloseTimeMinute: scheduleCloseTimeMinute,
+      dayOfWeek: dayOfWeek,
+      sellerId: sellerId,
+      lastPostedAt: lastPostedAt,
+      isActive: isActive,
+      createdAt: createdAt,
+    );
+  }
+
   // Internal constructor for Hive deserialization (uses raw hour/minute values)
   ScheduledListing._internal({
     required this.scheduledId,

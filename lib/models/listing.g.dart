@@ -40,13 +40,20 @@ class ListingAdapter extends TypeAdapter<Listing> {
       preparationTimeMinutes: fields[20] as int?,
       maxCapacity: fields[21] as int?,
       currentOrders: fields[22] == null ? 0 : fields[22] as int,
+      clothingCategory: fields[23] as ClothingCategory?,
+      description: fields[24] as String?,
+      availableSizes: (fields[25] as List?)?.cast<String>(),
+      availableColors: (fields[26] as List?)?.cast<String>(),
+      sizeColorCombinations:
+          (fields[27] as List?)?.cast<SizeColorCombination>(),
+      colorImages: (fields[28] as Map?)?.cast<String, String>(),
     );
   }
 
   @override
   void write(BinaryWriter writer, Listing obj) {
     writer
-      ..writeByte(23)
+      ..writeByte(29)
       ..writeByte(0)
       ..write(obj.name)
       ..writeByte(1)
@@ -92,7 +99,19 @@ class ListingAdapter extends TypeAdapter<Listing> {
       ..writeByte(21)
       ..write(obj.maxCapacity)
       ..writeByte(22)
-      ..write(obj.currentOrders);
+      ..write(obj.currentOrders)
+      ..writeByte(23)
+      ..write(obj.clothingCategory)
+      ..writeByte(24)
+      ..write(obj.description)
+      ..writeByte(25)
+      ..write(obj.availableSizes)
+      ..writeByte(26)
+      ..write(obj.availableColors)
+      ..writeByte(27)
+      ..write(obj.sizeColorCombinations)
+      ..writeByte(28)
+      ..write(obj.colorImages);
   }
 
   @override

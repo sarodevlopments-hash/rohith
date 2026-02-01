@@ -321,6 +321,65 @@ class _BuyerOrdersScreenState extends State<BuyerOrdersScreen> {
                             fontWeight: FontWeight.w600,
                           ),
                         ),
+                        // Show size and color if available
+                        if ((order.selectedSize != null && order.selectedSize!.isNotEmpty) ||
+                            (order.selectedColor != null && order.selectedColor!.isNotEmpty)) ...[
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 4,
+                            children: [
+                              if (order.selectedSize != null && order.selectedSize!.isNotEmpty)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.shade50,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: Colors.blue.shade200, width: 0.5),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.straighten, size: 12, color: Colors.blue.shade700),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Size: ${order.selectedSize}',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.blue.shade700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              if (order.selectedColor != null && order.selectedColor!.isNotEmpty)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.purple.shade50,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: Colors.purple.shade200, width: 0.5),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.palette, size: 12, color: Colors.purple.shade700),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Color: ${order.selectedColor}',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.purple.shade700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
                         const SizedBox(height: 4),
                         // Show seller name (blurred before confirmation, clear after) for groceries/vegetables
                         SellerNameWidget(
@@ -827,6 +886,65 @@ class _BuyerOrdersContentState extends State<BuyerOrdersContent> {
                             fontWeight: FontWeight.w600,
                           ),
                         ),
+                        // Show size and color if available
+                        if ((order.selectedSize != null && order.selectedSize!.isNotEmpty) ||
+                            (order.selectedColor != null && order.selectedColor!.isNotEmpty)) ...[
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 4,
+                            children: [
+                              if (order.selectedSize != null && order.selectedSize!.isNotEmpty)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.shade50,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: Colors.blue.shade200, width: 0.5),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.straighten, size: 12, color: Colors.blue.shade700),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Size: ${order.selectedSize}',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.blue.shade700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              if (order.selectedColor != null && order.selectedColor!.isNotEmpty)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.purple.shade50,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: Colors.purple.shade200, width: 0.5),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.palette, size: 12, color: Colors.purple.shade700),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Color: ${order.selectedColor}',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.purple.shade700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
                         const SizedBox(height: 4),
                         // Show seller name (blurred before confirmation, clear after) for groceries/vegetables
                         Builder(

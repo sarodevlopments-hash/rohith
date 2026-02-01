@@ -26,6 +26,11 @@ class OrderFirestoreService {
       'paymentCompletedAt': o.paymentCompletedAt?.toUtc(),
       'sellerRespondedAt': o.sellerRespondedAt?.toUtc(),
       'paymentMethod': o.paymentMethod,
+      'selectedPackQuantity': o.selectedPackQuantity,
+      'selectedPackPrice': o.selectedPackPrice,
+      'selectedPackLabel': o.selectedPackLabel,
+      'selectedSize': o.selectedSize,
+      'selectedColor': o.selectedColor,
       'updatedAt': FieldValue.serverTimestamp(),
     };
   }
@@ -84,6 +89,11 @@ class OrderFirestoreService {
       paymentCompletedAt: m['paymentCompletedAt'] == null ? null : _dt(m['paymentCompletedAt']),
       sellerRespondedAt: m['sellerRespondedAt'] == null ? null : _dt(m['sellerRespondedAt']),
       paymentMethod: m['paymentMethod'] as String?,
+      selectedPackQuantity: (m['selectedPackQuantity'] as num?)?.toDouble(),
+      selectedPackPrice: (m['selectedPackPrice'] as num?)?.toDouble(),
+      selectedPackLabel: m['selectedPackLabel'] as String?,
+      selectedSize: m['selectedSize'] as String?,
+      selectedColor: m['selectedColor'] as String?,
     );
   }
 }

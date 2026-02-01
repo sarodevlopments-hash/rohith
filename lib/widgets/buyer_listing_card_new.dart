@@ -11,6 +11,7 @@ import '../models/food_category.dart';
 import '../models/measurement_unit.dart';
 import '../models/pack_size.dart';
 import '../models/sell_type.dart';
+import '../models/size_color_combination.dart';
 import '../models/rating.dart';
 import '../screens/cart_screen.dart';
 import '../services/cart_service.dart';
@@ -27,6 +28,8 @@ class BuyerListingCard extends StatefulWidget {
 class _BuyerListingCardState extends State<BuyerListingCard> {
   int selectedQuantity = 1;
   PackSize? selectedPackSize; // Selected pack size for groceries with multiple packs
+  String? selectedSize; // Selected size for clothing
+  String? selectedColor; // Selected color for clothing
   double? averageFoodRating;
   double? averageSellerRating;
 
@@ -34,6 +37,27 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
   void initState() {
     super.initState();
     _loadRatings();
+    // Use post-frame callback to ensure widget is built before auto-selecting
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _autoSelectSizeIfSingle();
+    });
+  }
+
+  void _autoSelectSizeIfSingle() {
+    // Auto-select size if there's only one size available for clothing items
+    if (widget.listing.type == SellType.clothingAndApparel) {
+      final hasCombinations = widget.listing.sizeColorCombinations != null && widget.listing.sizeColorCombinations!.isNotEmpty;
+      final sizes = hasCombinations
+          ? widget.listing.sizeColorCombinations!.map((combo) => combo.size).toList()
+          : (widget.listing.availableSizes ?? []);
+      
+      // Auto-select if there's exactly one size
+      if (sizes.length == 1 && selectedSize == null) {
+        setState(() {
+          selectedSize = sizes.first;
+        });
+      }
+    }
   }
 
   Future<void> _loadRatings() async {
@@ -111,6 +135,43 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
   }
 
   Future<void> _addToCart() async {
+    // Validate size and color selection for clothing items
+    if (widget.listing.type == SellType.clothingAndApparel) {
+      // Check if we have size-color combinations or fallback to simple lists
+      final hasCombinations = widget.listing.sizeColorCombinations != null && widget.listing.sizeColorCombinations!.isNotEmpty;
+      final hasSizes = hasCombinations 
+          ? widget.listing.sizeColorCombinations!.isNotEmpty
+          : (widget.listing.availableSizes != null && widget.listing.availableSizes!.isNotEmpty);
+      
+      if (hasSizes && selectedSize == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select a size')),
+        );
+        return;
+      }
+      
+      // Check if colors are required for the selected size
+      if (selectedSize != null) {
+        List<String>? colorsForSize;
+        if (hasCombinations) {
+          final combo = widget.listing.sizeColorCombinations!.firstWhere(
+            (c) => c.size == selectedSize,
+            orElse: () => SizeColorCombination(size: '', availableColors: []),
+          );
+          colorsForSize = combo.availableColors;
+        } else {
+          colorsForSize = widget.listing.availableColors;
+        }
+        
+        if (colorsForSize != null && colorsForSize.isNotEmpty && selectedColor == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please select a color')),
+          );
+          return;
+        }
+      }
+    }
+
     if (selectedQuantity > widget.listing.quantity) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Only ${widget.listing.quantity} items available')),
@@ -143,7 +204,12 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
       CartService.clear();
     }
 
-    await CartService.addItem(widget.listing, selectedQuantity);
+    await CartService.addItem(
+      widget.listing,
+      selectedQuantity,
+      selectedSize: selectedSize,
+      selectedColor: selectedColor,
+    );
     if (mounted) {
       // Don't show notification if already on cart screen
       // Check by looking for CartScreen in the widget tree
@@ -216,77 +282,94 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
             borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
             child: Stack(
               children: [
-                Container(
-                  height: 200,
-                  width: double.infinity,
-                  color: Colors.grey.shade200,
-                  child: widget.listing.imagePath != null
-                      ? (kIsWeb
-                          ? FutureBuilder<Uint8List>(
-                              future: _loadImageBytes(widget.listing.imagePath!),
-                              builder: (context, snapshot) {
-                                if (snapshot.hasData) {
-                                  return Image.memory(
-                                    snapshot.data!,
-                                    fit: BoxFit.cover,
-                                  );
-                                }
-                                return const Center(child: CircularProgressIndicator());
-                              },
-                            )
-                          : File(widget.listing.imagePath!).existsSync()
-                              ? Image.file(
-                                  File(widget.listing.imagePath!),
-                                  fit: BoxFit.cover,
-                                )
-                              : const Center(
-                                  child: Icon(Icons.image_not_supported, size: 64),
-                                ))
-                      : const Center(
-                          child: Icon(Icons.fastfood, size: 64, color: Colors.grey),
-                        ),
+                // Get image path based on selected color
+                Builder(
+                  builder: (context) {
+                    final imagePath = widget.listing.getImagePathForColor(selectedColor);
+                    return AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 300),
+                      transitionBuilder: (Widget child, Animation<double> animation) {
+                        return FadeTransition(
+                          opacity: animation,
+                          child: child,
+                        );
+                      },
+                      child: Container(
+                        key: ValueKey<String?>(imagePath ?? 'default'),
+                        height: 200,
+                        width: double.infinity,
+                        color: Colors.grey.shade200,
+                        child: imagePath != null
+                            ? (kIsWeb
+                                ? FutureBuilder<Uint8List>(
+                                    future: _loadImageBytes(imagePath),
+                                    builder: (context, snapshot) {
+                                      if (snapshot.hasData) {
+                                        return Image.memory(
+                                          snapshot.data!,
+                                          fit: BoxFit.cover,
+                                        );
+                                      }
+                                      return const Center(child: CircularProgressIndicator());
+                                    },
+                                  )
+                                : File(imagePath).existsSync()
+                                    ? Image.file(
+                                        File(imagePath),
+                                        fit: BoxFit.cover,
+                                      )
+                                    : const Center(
+                                        child: Icon(Icons.image_not_supported, size: 64),
+                                      ))
+                            : const Center(
+                                child: Icon(Icons.fastfood, size: 64, color: Colors.grey),
+                              ),
+                      ),
+                    );
+                  },
                 ),
-                // Food Type Indicator (Top Left)
-                Positioned(
-                  top: 12,
-                  left: 12,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: _getFoodTypeColor(),
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
-                          blurRadius: 4,
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          widget.listing.category == FoodCategory.veg
-                              ? Icons.eco
-                              : widget.listing.category == FoodCategory.egg
-                                  ? Icons.egg
-                                  : Icons.set_meal, // Better icon for non-veg
-                          color: Colors.white,
-                          size: 16,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          _getFoodTypeLabel(),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
+                // Food Type Indicator (Top Left) - Only for food items, not clothing
+                if (widget.listing.type != SellType.clothingAndApparel)
+                  Positioned(
+                    top: 12,
+                    left: 12,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: _getFoodTypeColor(),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.2),
+                            blurRadius: 4,
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            widget.listing.category == FoodCategory.veg
+                                ? Icons.eco
+                                : widget.listing.category == FoodCategory.egg
+                                    ? Icons.egg
+                                    : Icons.set_meal, // Better icon for non-veg
+                            color: Colors.white,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            _getFoodTypeLabel(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
                 // Discount Badge (Top Right)
                 if (discount > 0)
                   Positioned(
@@ -445,6 +528,193 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
+                ],
+
+                // Available Sizes and Colors (for clothing) - Selectable with combinations
+                if (widget.listing.type == SellType.clothingAndApparel) ...[
+                  const SizedBox(height: 12),
+                  // Get sizes from combinations or fallback to availableSizes
+                  Builder(
+                    builder: (context) {
+                      final sizes = widget.listing.sizeColorCombinations != null && widget.listing.sizeColorCombinations!.isNotEmpty
+                          ? widget.listing.sizeColorCombinations!.map((combo) => combo.size).toList()
+                          : (widget.listing.availableSizes ?? []);
+                      
+                      if (sizes.isEmpty) return const SizedBox.shrink();
+                      
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.straighten, size: 16, color: Colors.grey.shade600),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Select Size: ',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey.shade700,
+                                ),
+                              ),
+                              if (selectedSize == null)
+                                Text(
+                                  '(Required)',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.red.shade600,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: sizes.map((size) {
+                              final isSelected = selectedSize == size;
+                              final isFreeSize = size.toLowerCase() == 'free size';
+                              return GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    selectedSize = size;
+                                    selectedColor = null; // Reset color when size changes
+                                  });
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: isSelected 
+                                        ? (isFreeSize ? Colors.purple.shade600 : Colors.blue.shade600)
+                                        : (isFreeSize ? Colors.purple.shade50 : Colors.blue.shade50),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: isSelected 
+                                          ? (isFreeSize ? Colors.purple.shade700 : Colors.blue.shade700)
+                                          : (isFreeSize ? Colors.purple.shade200 : Colors.blue.shade200),
+                                      width: isSelected ? 2 : 1,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (isFreeSize) ...[
+                                        Icon(
+                                          Icons.all_inclusive,
+                                          size: 16,
+                                          color: isSelected ? Colors.white : Colors.purple.shade700,
+                                        ),
+                                        const SizedBox(width: 4),
+                                      ],
+                                      Text(
+                                        size,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: isSelected ? Colors.white : (isFreeSize ? Colors.purple.shade700 : Colors.blue.shade700),
+                                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                  // Show colors based on selected size
+                  Builder(
+                    builder: (context) {
+                      if (selectedSize == null) return const SizedBox.shrink();
+                      
+                      // Get colors for selected size from combinations
+                      List<String> availableColorsForSize = [];
+                      if (widget.listing.sizeColorCombinations != null && widget.listing.sizeColorCombinations!.isNotEmpty) {
+                        final combo = widget.listing.sizeColorCombinations!.firstWhere(
+                          (c) => c.size == selectedSize,
+                          orElse: () => SizeColorCombination(size: '', availableColors: []),
+                        );
+                        availableColorsForSize = combo.availableColors;
+                        // If no colors found in combination but fallback colors exist, use them
+                        if (availableColorsForSize.isEmpty && widget.listing.availableColors != null && widget.listing.availableColors!.isNotEmpty) {
+                          availableColorsForSize = widget.listing.availableColors!;
+                        }
+                      } else if (widget.listing.availableColors != null) {
+                        // Fallback to all colors if no combinations
+                        availableColorsForSize = widget.listing.availableColors!;
+                      }
+                      
+                      if (availableColorsForSize.isEmpty) return const SizedBox.shrink();
+                      
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Icon(Icons.palette, size: 16, color: Colors.grey.shade600),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Select Color for $selectedSize: ',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey.shade700,
+                                ),
+                              ),
+                              if (selectedColor == null)
+                                Text(
+                                  '(Required)',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.red.shade600,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: availableColorsForSize.map((color) {
+                              final isSelected = selectedColor == color;
+                              return GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    selectedColor = color;
+                                  });
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: isSelected ? Colors.pink.shade600 : Colors.pink.shade50,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: isSelected ? Colors.pink.shade700 : Colors.pink.shade200,
+                                      width: isSelected ? 2 : 1,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    color,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: isSelected ? Colors.white : Colors.pink.shade700,
+                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 12),
                 ],
 
                 const SizedBox(height: 12),

@@ -11,6 +11,8 @@ import 'services/scheduled_listing_service.dart';
 import 'services/accepted_order_notification_service.dart';
 import 'models/sell_type.dart';
 import 'models/food_category.dart';
+import 'models/clothing_category.dart';
+import 'models/size_color_combination.dart';
 import 'models/cooked_food_source.dart';
 import 'models/seller_profile.dart';
 import 'models/measurement_unit.dart';
@@ -62,6 +64,15 @@ void main() async {
     // ✅ Register adapters
     Hive.registerAdapter(SellTypeAdapter());
     Hive.registerAdapter(FoodCategoryAdapter());
+    Hive.registerAdapter(ClothingCategoryAdapter());
+    // Register SizeColorCombinationAdapter before ListingAdapter since Listing contains SizeColorCombination
+    try {
+      Hive.registerAdapter(SizeColorCombinationAdapter());
+      print('SizeColorCombinationAdapter registered successfully');
+    } catch (e) {
+      print('Error registering SizeColorCombinationAdapter: $e');
+      rethrow;
+    }
     Hive.registerAdapter(CookedFoodSourceAdapter());
   Hive.registerAdapter(SellerProfileAdapter());
   Hive.registerAdapter(MeasurementUnitAdapter());

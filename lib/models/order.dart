@@ -73,6 +73,12 @@ class Order extends HiveObject {
   @HiveField(21)
   DateTime? statusChangedAt; // When order status was last changed
 
+  @HiveField(22)
+  final String? selectedSize; // Selected size for clothing items
+
+  @HiveField(23)
+  final String? selectedColor; // Selected color for clothing items
+
   Order({
     required this.foodName,
     required this.sellerName,
@@ -96,6 +102,8 @@ class Order extends HiveObject {
     this.isLiveKitchenOrder,
     this.preparationTimeMinutes,
     this.statusChangedAt,
+    this.selectedSize,
+    this.selectedColor,
   }) : orderId = orderId ?? DateTime.now().millisecondsSinceEpoch.toString();
 
   // Helper methods for Live Kitchen order status

@@ -81,12 +81,12 @@ class _VendorDashboardState extends State<VendorDashboard> {
             ),
           ],
 
-          /// 💊 MEDICINE
-          if (_selectedType == SellType.medicine) ...[
+          /// 👕 CLOTHING AND APPAREL
+          if (_selectedType == SellType.clothingAndApparel) ...[
             CheckboxListTile(
               value: true,
               onChanged: (_) {},
-              title: const Text("OTC Medicine"),
+              title: const Text("Clothing and Apparel"),
             ),
           ],
 

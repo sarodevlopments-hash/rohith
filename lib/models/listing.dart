@@ -1,9 +1,11 @@
 import 'package:hive/hive.dart';
 import 'sell_type.dart';
 import 'food_category.dart';
+import 'clothing_category.dart';
 import 'cooked_food_source.dart';
 import 'measurement_unit.dart';
 import 'pack_size.dart';
+import 'size_color_combination.dart';
 
 part 'listing.g.dart';
 
@@ -79,6 +81,24 @@ class Listing extends HiveObject {
   @HiveField(22, defaultValue: 0)
   int currentOrders; // Current number of pending orders (for capacity tracking)
 
+  @HiveField(23)
+  final ClothingCategory? clothingCategory; // For clothing and apparel items
+
+  @HiveField(24)
+  final String? description; // Product description (brand, details, etc.)
+
+  @HiveField(25)
+  final List<String>? availableSizes; // Available sizes (e.g., ["S", "M", "L", "XL"]) - deprecated, use sizeColorCombinations
+
+  @HiveField(26)
+  final List<String>? availableColors; // Available colors (e.g., ["Red", "Blue", "Black"]) - deprecated, use sizeColorCombinations
+
+  @HiveField(27)
+  final List<SizeColorCombination>? sizeColorCombinations; // Size-color combinations (e.g., S: [Red, Blue], M: [Blue, Black])
+
+  @HiveField(28)
+  final Map<String, String>? colorImages; // Map of color name to image path (e.g., {"Red": "/path/to/red.jpg", "Blue": "/path/to/blue.jpg"})
+
   Listing({
     required this.name,
     required this.sellerName,
@@ -103,6 +123,12 @@ class Listing extends HiveObject {
     this.preparationTimeMinutes,
     this.maxCapacity,
     this.currentOrders = 0,
+    this.clothingCategory,
+    this.description,
+    this.availableSizes,
+    this.availableColors,
+    this.sizeColorCombinations,
+    this.colorImages,
   });
 
   // Helper method to check if listing has multiple pack sizes
@@ -130,6 +156,14 @@ class Listing extends HiveObject {
   String get bulkPortionText {
     if (!isValidBulkFood) return '';
     return portionDescription ?? 'Bulk pack';
+  }
+
+  // Get image path for a specific color (returns color-specific image or default image)
+  String? getImagePathForColor(String? color) {
+    if (color != null && colorImages != null && colorImages!.containsKey(color)) {
+      return colorImages![color];
+    }
+    return imagePath; // Fallback to default image
   }
 
   // Live Kitchen helpers
