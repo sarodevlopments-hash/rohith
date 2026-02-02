@@ -13,6 +13,7 @@ import '../models/measurement_unit.dart';
 import '../services/order_firestore_service.dart';
 import '../services/seller_profile_service.dart';
 import '../widgets/seller_name_widget.dart';
+import '../theme/app_theme.dart';
 
 class OrderDetailsScreen extends StatelessWidget {
   final Order order;
@@ -113,15 +114,7 @@ class OrderDetailsScreen extends StatelessWidget {
                     height: 250,
                     width: double.infinity,
                     margin: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
-                          blurRadius: 10,
-                        ),
-                      ],
-                    ),
+                    decoration: AppTheme.getCardDecoration(elevated: true),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(16),
                       child: kIsWeb
@@ -159,11 +152,7 @@ class OrderDetailsScreen extends StatelessWidget {
                   // Product Name (already includes pack info if available)
                   Text(
                     order.foodName,
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
+                    style: AppTheme.heading2,
                   ),
                   // Show size and color prominently if available
                   if ((order.selectedSize != null && order.selectedSize!.isNotEmpty) ||
@@ -175,23 +164,27 @@ class OrderDetailsScreen extends StatelessWidget {
                       children: [
                         if (order.selectedSize != null && order.selectedSize!.isNotEmpty)
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.shade50,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.blue.shade200),
+                            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                            decoration: AppTheme.getChipDecoration(
+                              isSelected: true,
+                              color: order.selectedSize == 'Free Size' ? AppTheme.secondaryColor : AppTheme.infoColor,
+                              isFreeSize: order.selectedSize == 'Free Size',
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.straighten, size: 16, color: Colors.blue.shade700),
-                                const SizedBox(width: 4),
+                                Icon(
+                                  order.selectedSize == 'Free Size' ? Icons.all_inclusive : Icons.straighten,
+                                  size: 18,
+                                  color: Colors.white,
+                                ),
+                                const SizedBox(width: 8),
                                 Text(
                                   'Size: ${order.selectedSize}',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.blue.shade700,
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
                                   ),
                                 ),
                               ],
@@ -199,23 +192,22 @@ class OrderDetailsScreen extends StatelessWidget {
                           ),
                         if (order.selectedColor != null && order.selectedColor!.isNotEmpty)
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.purple.shade50,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.purple.shade200),
+                            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                            decoration: AppTheme.getChipDecoration(
+                              isSelected: true,
+                              color: AppTheme.accentColor,
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.palette, size: 16, color: Colors.purple.shade700),
-                                const SizedBox(width: 4),
+                                const Icon(Icons.palette, size: 18, color: Colors.white),
+                                const SizedBox(width: 8),
                                 Text(
                                   'Color: ${order.selectedColor}',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.purple.shade700,
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
                                   ),
                                 ),
                               ],

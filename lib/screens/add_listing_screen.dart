@@ -28,10 +28,12 @@ import '../services/seller_profile_service.dart';
 import 'package:hive/hive.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../theme/app_theme.dart';
 
 class AddListingScreen extends StatefulWidget {
   final ValueNotifier<int>? promptCounter;
-  const AddListingScreen({super.key, this.promptCounter});
+  final VoidCallback? onBackToDashboard;
+  const AddListingScreen({super.key, this.promptCounter, this.onBackToDashboard});
 
   @override
   State<AddListingScreen> createState() => _AddListingScreenState();
@@ -451,87 +453,372 @@ class _AddListingScreenState extends State<AddListingScreen> {
     if (!force) _hasShownTypePrompt = true;
     SellType tempType = selectedType;
 
-    await showDialog(
+    final pickedType = await showDialog<SellType>(
       barrierDismissible: false,
       context: context,
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setStateDialog) {
-            return AlertDialog(
-              title: const Text('Choose item type'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ...SellType.values.map((t) {
-                    String? subtitle;
-                    if (t == SellType.cookedFood) {
-                      subtitle = 'FSSAI mandatory for cooked food';
-                    } else if (t == SellType.liveKitchen) {
-                      subtitle = 'Cook on demand - real-time orders';
-                    }
-                    return RadioListTile<SellType>(
-                      value: t,
-                      groupValue: tempType,
-                      title: Text(t == SellType.liveKitchen 
-                          ? '🔥 Live Kitchen' 
-                          : t.displayName),
-                      subtitle: subtitle != null ? Text(subtitle) : null,
-                      onChanged: (val) {
-                        if (val == null) return;
-                        setStateDialog(() => tempType = val);
-                      },
-                    );
-                  }),
-                  if (tempType == SellType.cookedFood)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8.0),
-                      child: Row(
-                        children: const [
-                          Icon(Icons.info_outline, color: Colors.orange, size: 18),
-                          SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              'FSSAI number will be required.',
-                              style: TextStyle(fontSize: 12, color: Colors.orange),
+            String _typeTitle(SellType t) =>
+                t == SellType.liveKitchen ? 'Live Kitchen' : t.displayName;
+
+            String _typeHint(SellType t) {
+              switch (t) {
+                case SellType.cookedFood:
+                  return 'Ready-made food items';
+                case SellType.liveKitchen:
+                  return 'Cook after order — real-time prep';
+                case SellType.groceries:
+                  return 'Packed daily essentials';
+                case SellType.vegetables:
+                  return 'Fresh produce';
+                case SellType.clothingAndApparel:
+                  return 'Apparel & accessories';
+              }
+            }
+
+            IconData _typeIcon(SellType t) {
+              switch (t) {
+                case SellType.cookedFood:
+                  return Icons.restaurant_rounded;
+                case SellType.groceries:
+                  return Icons.shopping_basket_rounded;
+                case SellType.vegetables:
+                  return Icons.eco_rounded;
+                case SellType.clothingAndApparel:
+                  return Icons.checkroom_rounded;
+                case SellType.liveKitchen:
+                  return Icons.local_fire_department_rounded;
+              }
+            }
+
+            String? _typeImagePath(SellType t) {
+              switch (t) {
+                case SellType.cookedFood:
+                  return 'assets/images/categories/cookedfood.png';
+                case SellType.groceries:
+                  return 'assets/images/categories/gro.png';
+                case SellType.vegetables:
+                  return 'assets/images/categories/vegs and fruitrs.png';
+                case SellType.clothingAndApparel:
+                  return 'assets/images/categories/clothesand app.png';
+                case SellType.liveKitchen:
+                  return 'assets/images/categories/live kitchen.png';
+              }
+            }
+
+            Color _typeColor(SellType t) {
+              switch (t) {
+                case SellType.cookedFood:
+                  return Colors.deepOrange;
+                case SellType.groceries:
+                  return Colors.blue;
+                case SellType.vegetables:
+                  return Colors.green;
+                case SellType.clothingAndApparel:
+                  return Colors.purple;
+                case SellType.liveKitchen:
+                  return Colors.red;
+              }
+            }
+
+            LinearGradient? _typeGradient(SellType t) {
+              if (t != SellType.liveKitchen) return null;
+              return const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFFFF8A00), Color(0xFFFF3D00)],
+              );
+            }
+
+            Widget _typeCard(SellType t) {
+              final isSelected = tempType == t;
+              final base = _typeColor(t);
+              final gradient = _typeGradient(t);
+
+              return GestureDetector(
+                onTap: () => setStateDialog(() => tempType = t),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOut,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: gradient == null
+                        ? base.withOpacity(isSelected ? 0.16 : 0.10)
+                        : null,
+                    gradient: gradient != null
+                        ? LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: isSelected
+                                ? [
+                                    gradient.colors[0].withOpacity(0.22),
+                                    gradient.colors[1].withOpacity(0.22),
+                                  ]
+                                : [
+                                    gradient.colors[0].withOpacity(0.12),
+                                    gradient.colors[1].withOpacity(0.12),
+                                  ],
+                          )
+                        : null,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: isSelected
+                          ? base.withOpacity(0.9)
+                          : base.withOpacity(0.18),
+                      width: isSelected ? 2 : 1,
+                    ),
+                    boxShadow: isSelected
+                        ? [
+                            BoxShadow(
+                              color: base.withOpacity(0.18),
+                              blurRadius: 14,
+                              offset: const Offset(0, 6),
                             ),
+                          ]
+                        : [],
+                  ),
+                  child: Stack(
+                    children: [
+                      if (isSelected)
+                        Positioned(
+                          top: 0,
+                          right: 0,
+                          child: Container(
+                            padding: const EdgeInsets.all(5),
+                            decoration: BoxDecoration(
+                              color: base.withOpacity(0.95),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.check_rounded,
+                              size: 16,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Align(
+                            alignment: Alignment.topLeft,
+                            child: Container(
+                              height: 44,
+                              width: 44,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.95),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(14),
+                                child: _typeImagePath(t) != null
+                                    ? Image.asset(
+                                        _typeImagePath(t)!,
+                                        fit: BoxFit.cover,
+                                        width: 44,
+                                        height: 44,
+                                        errorBuilder: (context, error, stackTrace) {
+                                          // Fallback to icon if image fails
+                                          return Icon(
+                                            _typeIcon(t),
+                                            size: 24,
+                                            color: base,
+                                          );
+                                        },
+                                      )
+                                    : Icon(
+                                        _typeIcon(t),
+                                        size: 24,
+                                        color: base,
+                                      ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _typeTitle(t),
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _typeHint(t),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade700,
+                              height: 1.2,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ),
-                    ),
-                  if (tempType == SellType.liveKitchen)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8.0),
-                      child: Row(
-                        children: const [
-                          Icon(Icons.restaurant, color: Colors.deepOrange, size: 18),
-                          SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              'Cook food on demand. Buyers order, you prepare fresh.',
-                              style: TextStyle(fontSize: 12, color: Colors.deepOrange),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(ctx).pop();
-                  },
-                  child: const Text('Continue'),
+                    ],
+                  ),
                 ),
-              ],
-              actionsPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              );
+            }
+
+            final requiresFssai =
+                tempType == SellType.cookedFood || tempType == SellType.liveKitchen;
+
+            final buttonLabel = tempType == SellType.liveKitchen
+                ? 'Continue with Live Kitchen'
+                : 'Continue with ${tempType.displayName}';
+
+            return Dialog(
+              insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: const [
+                              Text(
+                                'What are you selling today?',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'You can change this later',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.black54,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () {
+                            // Allow closing without changing the current selection.
+                            // Use the root navigator to guarantee the dialog is dismissed.
+                            Navigator.of(context, rootNavigator: true).pop(null);
+                          },
+                          icon: const Icon(Icons.close_rounded),
+                          color: Colors.black26,
+                          tooltip: 'Close',
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final screenWidth = MediaQuery.of(ctx).size.width;
+                        final useTwoColumns = screenWidth >= 360;
+                        final crossAxisCount = useTwoColumns ? 2 : 1;
+                        // Fixed card height to avoid overflow; slightly taller on wider screens
+                        final cardHeight = useTwoColumns ? 150.0 : 140.0;
+                        final types = [
+                          SellType.cookedFood,
+                          SellType.groceries,
+                          SellType.vegetables,
+                          SellType.clothingAndApparel,
+                          SellType.liveKitchen,
+                        ];
+
+                        return GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: types.length,
+                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: crossAxisCount,
+                            crossAxisSpacing: 12,
+                            mainAxisSpacing: 12,
+                            mainAxisExtent: cardHeight,
+                          ),
+                          itemBuilder: (context, index) => _typeCard(types[index]),
+                        );
+                      },
+                    ),
+                    if (requiresFssai) ...[
+                      const SizedBox(height: 14),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: Colors.amber.withOpacity(0.25),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.verified_rounded,
+                              color: Colors.orange,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                tempType == SellType.liveKitchen
+                                    ? 'FSSAI license required for Live Kitchen items.'
+                                    : 'FSSAI license required for cooked food items.',
+                                style: const TextStyle(
+                                  fontSize: 12.5,
+                                  color: Colors.black87,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(ctx).pop(tempType),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primaryColor,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: Text(
+                          buttonLabel,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             );
           },
         );
       },
     );
 
-    _applySelectedType(tempType);
+    if (pickedType != null) {
+      _applySelectedType(pickedType);
+    }
   }
 
   Future<bool> _ensureLocationPermission() async {
@@ -1574,46 +1861,63 @@ class _AddListingScreenState extends State<AddListingScreen> {
   }
 
   Widget _buildSectionTitle(String title, {IconData? icon, Color? iconColor, String? subtitle}) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 24, bottom: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12, top: 8),
+      child: Row(
         children: [
-          Row(
-            children: [
-              if (icon != null) ...[
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: (iconColor ?? Colors.orange).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(icon, color: iconColor ?? Colors.orange, size: 20),
+          if (icon != null) ...[
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    (iconColor ?? AppTheme.primaryColor).withOpacity(0.15),
+                    (iconColor ?? AppTheme.primaryColor).withOpacity(0.08),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
-                const SizedBox(width: 12),
-              ],
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                  letterSpacing: 0.5,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: (iconColor ?? AppTheme.primaryColor).withOpacity(0.2),
+                  width: 1,
                 ),
               ),
-            ],
-          ),
-          if (subtitle != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              subtitle,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey.shade600,
-                fontStyle: FontStyle.italic,
+              child: Icon(
+                icon,
+                color: iconColor ?? AppTheme.primaryColor,
+                size: 20,
               ),
             ),
+            const SizedBox(width: 12),
           ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black87,
+                    letterSpacing: -0.4,
+                  ),
+                ),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey.shade600,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -1621,16 +1925,28 @@ class _AddListingScreenState extends State<AddListingScreen> {
 
   Widget _buildCard(Widget child, {Color? backgroundColor}) {
     return Container(
+      margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: backgroundColor ?? Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        color: backgroundColor ?? AppTheme.cardColor,
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 20,
+            offset: const Offset(0, 4),
+            spreadRadius: 0,
+          ),
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 8,
             offset: const Offset(0, 2),
+            spreadRadius: 0,
           ),
         ],
+        border: Border.all(
+          color: AppTheme.borderColor.withOpacity(0.5),
+          width: 1,
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -1639,43 +1955,241 @@ class _AddListingScreenState extends State<AddListingScreen> {
     );
   }
 
+  Widget _buildModernTextField({
+    required TextEditingController controller,
+    required String label,
+    IconData? prefixIcon,
+    Widget? suffixIcon,
+    String? hintText,
+    String? helperText,
+    TextInputType? keyboardType,
+    int? maxLines,
+    String? Function(String?)? validator,
+    bool enabled = true,
+    Color? iconColor,
+  }) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboardType,
+      maxLines: maxLines ?? 1,
+      enabled: enabled,
+      style: TextStyle(
+        fontSize: 15,
+        fontWeight: FontWeight.w500,
+        color: Colors.black87,
+        letterSpacing: -0.2,
+      ),
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hintText,
+        helperText: helperText,
+        prefixIcon: prefixIcon != null
+            ? Icon(prefixIcon, color: iconColor ?? AppTheme.primaryColor, size: 22)
+            : null,
+        suffixIcon: suffixIcon,
+        floatingLabelBehavior: FloatingLabelBehavior.always,
+        labelStyle: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: Colors.grey.shade700,
+          letterSpacing: -0.2,
+        ),
+        hintStyle: TextStyle(
+          fontSize: 14,
+          color: Colors.grey.shade400,
+          fontWeight: FontWeight.w400,
+        ),
+        helperStyle: TextStyle(
+          fontSize: 12,
+          color: Colors.grey.shade600,
+        ),
+        filled: true,
+        fillColor: enabled ? Colors.grey.shade50 : Colors.grey.shade100,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: Colors.grey.shade300, width: 1.5),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: Colors.grey.shade300, width: 1.5),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: AppTheme.primaryColor, width: 2),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: AppTheme.errorColor, width: 1.5),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: AppTheme.errorColor, width: 2),
+        ),
+      ),
+      validator: validator,
+    );
+  }
+
+  Widget _buildModernButton({
+    required String text,
+    required VoidCallback onPressed,
+    IconData? icon,
+    bool isPrimary = true,
+    bool isFullWidth = true,
+    Color? backgroundColor,
+    Gradient? gradient,
+  }) {
+    final buttonContent = Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: isFullWidth ? MainAxisSize.max : MainAxisSize.min,
+      children: [
+        if (icon != null) ...[
+          Icon(icon, size: 20, color: Colors.white),
+          const SizedBox(width: 8),
+        ],
+        Text(
+          text,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+            letterSpacing: -0.3,
+          ),
+        ),
+      ],
+    );
+
+    return Container(
+      width: isFullWidth ? double.infinity : null,
+      height: 54,
+      decoration: BoxDecoration(
+        gradient: gradient ??
+            (isPrimary
+                ? LinearGradient(
+                    colors: [AppTheme.warningColor, AppTheme.warningColor.withOpacity(0.85)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  )
+                : null),
+        color: backgroundColor ?? (isPrimary ? null : Colors.grey.shade200),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: isPrimary
+            ? [
+                BoxShadow(
+                  color: AppTheme.warningColor.withOpacity(0.3),
+                  blurRadius: 16,
+                  offset: const Offset(0, 8),
+                  spreadRadius: -2,
+                ),
+                BoxShadow(
+                  color: AppTheme.warningColor.withOpacity(0.15),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ]
+            : null,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(16),
+          child: Center(child: buttonContent),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade50,
+      backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Colors.white,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black87),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          "Start Selling",
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.black87,
-            fontSize: 20,
+          icon: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.arrow_back_ios_new, color: Colors.black87, size: 18),
           ),
+          onPressed: () {
+            if (widget.onBackToDashboard != null) {
+              widget.onBackToDashboard!();
+            } else {
+              Navigator.pop(context);
+            }
+          },
+        ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Start Selling",
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: Colors.black87,
+                fontSize: 22,
+                letterSpacing: -0.5,
+              ),
+            ),
+            Text(
+              "List your products",
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade600,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ],
         ),
         actions: [
           if (sellerProfile != null)
-            IconButton(
-              icon: const Icon(Icons.edit, color: Colors.orange),
-              tooltip: "Edit Profile",
-              onPressed: () {
-                setState(() {
-                  showSellerProfileForm = true;
-                });
-              },
+            Container(
+              margin: const EdgeInsets.only(right: 8),
+              child: IconButton(
+                icon: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [AppTheme.warningColor.withOpacity(0.15), AppTheme.warningColor.withOpacity(0.08)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.edit_rounded, color: AppTheme.warningColor, size: 20),
+                ),
+                tooltip: "Edit Profile",
+                onPressed: () {
+                  setState(() {
+                    showSellerProfileForm = true;
+                  });
+                },
+              ),
             ),
         ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(
+            height: 1,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.transparent, Colors.grey.shade200, Colors.transparent],
+              ),
+            ),
+          ),
+        ),
       ),
       body: Form(
         key: _formKey,
         child: ListView(
           controller: _scrollController,
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           children: [
             // Multi-Item Mode Toggle
             _buildCard(
@@ -1756,21 +2270,32 @@ class _AddListingScreenState extends State<AddListingScreen> {
             if (sellerProfile != null) ...[
               _buildSectionTitle("Quick Post", icon: Icons.history, iconColor: Colors.blue),
               _buildCard(
-                ElevatedButton.icon(
-                  onPressed: _showPreviousListingsDialog,
-                  icon: const Icon(Icons.repeat, size: 22),
-                  label: const Text(
-                    "Select from Previous Items",
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue.shade50,
-                    foregroundColor: Colors.blue.shade700,
-                    padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [AppTheme.infoColor.withOpacity(0.1), AppTheme.infoColor.withOpacity(0.05)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
-                    elevation: 0,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.infoColor.withOpacity(0.3)),
+                  ),
+                  child: ElevatedButton.icon(
+                    onPressed: _showPreviousListingsDialog,
+                    icon: Icon(Icons.repeat, size: 22, color: AppTheme.infoColor),
+                    label: Text(
+                      "Select from Previous Items",
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppTheme.infoColor),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      shadowColor: Colors.transparent,
+                      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
                   ),
                 ),
               ),
@@ -2889,21 +3414,34 @@ class _AddListingScreenState extends State<AddListingScreen> {
                         const SizedBox(height: 8),
                         // Quick add "Free Size" button
                         if (!sizeColorCombinations.any((combo) => combo.size.toLowerCase() == 'free size'))
-                          OutlinedButton.icon(
-                            onPressed: () {
-                              setState(() {
-                                sizeColorCombinations.add(SizeColorCombination(
-                                  size: 'Free Size',
-                                  availableColors: [],
-                                ));
-                              });
-                            },
-                            icon: const Icon(Icons.check_circle_outline, size: 18),
-                            label: const Text('Add Free Size'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.teal,
-                              side: BorderSide(color: Colors.teal.shade300),
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [AppTheme.secondaryColor.withOpacity(0.1), AppTheme.secondaryColor.withOpacity(0.05)],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: AppTheme.secondaryColor.withOpacity(0.3)),
+                            ),
+                            child: OutlinedButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  sizeColorCombinations.add(SizeColorCombination(
+                                    size: 'Free Size',
+                                    availableColors: [],
+                                  ));
+                                });
+                              },
+                              icon: Icon(Icons.all_inclusive, size: 18, color: AppTheme.secondaryColor),
+                              label: Text('Add Free Size', style: TextStyle(color: AppTheme.secondaryColor, fontWeight: FontWeight.w600)),
+                              style: OutlinedButton.styleFrom(
+                                side: BorderSide.none,
+                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
                             ),
                           ),
                       ],
@@ -2916,11 +3454,22 @@ class _AddListingScreenState extends State<AddListingScreen> {
                         final combo = entry.value;
                         return Container(
                           margin: const EdgeInsets.only(bottom: 16),
-                          padding: const EdgeInsets.all(12),
+                          padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: Colors.grey.shade50,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.grey.shade300),
+                            gradient: LinearGradient(
+                              colors: [AppTheme.backgroundColor, Colors.white],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: AppTheme.borderColor, width: 1.5),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.04),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2928,18 +3477,44 @@ class _AddListingScreenState extends State<AddListingScreen> {
                               Row(
                                 children: [
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                                     decoration: BoxDecoration(
-                                      color: Colors.blue.shade600,
-                                      borderRadius: BorderRadius.circular(8),
+                                      gradient: combo.size.toLowerCase() == 'free size'
+                                          ? LinearGradient(
+                                              colors: [AppTheme.secondaryColor, AppTheme.secondaryColor.withOpacity(0.8)],
+                                              begin: Alignment.topLeft,
+                                              end: Alignment.bottomRight,
+                                            )
+                                          : LinearGradient(
+                                              colors: [AppTheme.infoColor, AppTheme.infoColor.withOpacity(0.8)],
+                                              begin: Alignment.topLeft,
+                                              end: Alignment.bottomRight,
+                                            ),
+                                      borderRadius: BorderRadius.circular(12),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: (combo.size.toLowerCase() == 'free size' ? AppTheme.secondaryColor : AppTheme.infoColor).withOpacity(0.3),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ],
                                     ),
-                                    child: Text(
-                                      combo.size,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 14,
-                                      ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if (combo.size.toLowerCase() == 'free size')
+                                          const Icon(Icons.all_inclusive, color: Colors.white, size: 16),
+                                        if (combo.size.toLowerCase() == 'free size')
+                                          const SizedBox(width: 6),
+                                        Text(
+                                          combo.size,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                   const Spacer(),
@@ -2974,12 +3549,28 @@ class _AddListingScreenState extends State<AddListingScreen> {
                                                      colorImageFiles[color]!.existsSync());
                                     return Container(
                                       decoration: BoxDecoration(
-                                        color: hasImage ? Colors.green.shade50 : Colors.grey.shade100,
-                                        borderRadius: BorderRadius.circular(20),
+                                        gradient: hasImage
+                                            ? LinearGradient(
+                                                colors: [AppTheme.successColor.withOpacity(0.15), AppTheme.successColor.withOpacity(0.05)],
+                                                begin: Alignment.topLeft,
+                                                end: Alignment.bottomRight,
+                                              )
+                                            : null,
+                                        color: hasImage ? null : AppTheme.backgroundColor,
+                                        borderRadius: BorderRadius.circular(16),
                                         border: Border.all(
-                                          color: hasImage ? Colors.green.shade300 : Colors.grey.shade300,
-                                          width: hasImage ? 2 : 1,
+                                          color: hasImage ? AppTheme.successColor.withOpacity(0.4) : AppTheme.borderColor,
+                                          width: hasImage ? 2 : 1.5,
                                         ),
+                                        boxShadow: hasImage
+                                            ? [
+                                                BoxShadow(
+                                                  color: AppTheme.successColor.withOpacity(0.2),
+                                                  blurRadius: 8,
+                                                  offset: const Offset(0, 2),
+                                                ),
+                                              ]
+                                            : null,
                                       ),
                                       child: Row(
                                         mainAxisSize: MainAxisSize.min,
@@ -3634,81 +4225,107 @@ class _AddListingScreenState extends State<AddListingScreen> {
                   ),
                 ],
               ),
-              child: ElevatedButton(
-                onPressed: isSubmitting ? null : _submit,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-                  shadowColor: Colors.transparent,
-                  padding: const EdgeInsets.symmetric(vertical: 20),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: isSubmitting ? null : _submit,
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    child: isSubmitting
+                        ? const SizedBox(
+                            height: 24,
+                            width: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                isMultiItemMode ? Icons.add_circle_outline : Icons.upload_rounded,
+                                size: 22,
+                                color: Colors.white,
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                isMultiItemMode ? "Add to List" : "Post Listing",
+                                style: const TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: -0.3,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                          ),
                   ),
                 ),
-                child: isSubmitting
-                    ? const SizedBox(
-                        height: 24,
-                        width: 24,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      )
-                    : Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.check_circle, size: 24),
-                          const SizedBox(width: 12),
-                          Text(
-                            isMultiItemMode ? "Add to List" : "Post Listing",
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                        ],
-                      ),
               ),
             ),
             // Post All Listings Button (when in multi-item mode with pending items)
             if (isMultiItemMode && pendingItems.isNotEmpty) ...[
               const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: isSubmitting ? null : _postAllListings,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 18),
-                  minimumSize: const Size(double.infinity, 60),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+              Container(
+                height: 56,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [AppTheme.successColor, AppTheme.successColor.withOpacity(0.85)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
-                  elevation: 2,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.successColor.withOpacity(0.3),
+                      blurRadius: 16,
+                      offset: const Offset(0, 8),
+                      spreadRadius: -2,
+                    ),
+                    BoxShadow(
+                      color: AppTheme.successColor.withOpacity(0.15),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
-                child: isSubmitting
-                    ? const SizedBox(
-                        height: 24,
-                        width: 24,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      )
-                    : Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.check_circle, size: 24),
-                          const SizedBox(width: 12),
-                          Text(
-                            "Post All Listings (${pendingItems.length})",
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.5,
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: isSubmitting ? null : _postAllListings,
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      child: isSubmitting
+                          ? const SizedBox(
+                              height: 24,
+                              width: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.cloud_upload_rounded, size: 22, color: Colors.white),
+                                const SizedBox(width: 12),
+                                Text(
+                                  "Post All Listings (${pendingItems.length})",
+                                  style: const TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: -0.3,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                        ],
-                      ),
+                    ),
+                  ),
+                ),
               ),
             ],
             const SizedBox(height: 32),

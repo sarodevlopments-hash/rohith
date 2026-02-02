@@ -6,7 +6,7 @@ import '../models/order.dart';
 import '../services/notification_service.dart';
 import '../services/order_sync_service.dart';
 import '../services/accepted_order_notification_service.dart';
-import 'home_screen.dart';
+import 'buyer_category_home_screen.dart';
 import 'cart_screen.dart';
 import 'buyer_orders_screen.dart';
 import 'add_listing_screen.dart';
@@ -204,9 +204,16 @@ class _MainTabScreenState extends State<MainTabScreen> {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.15),
-            blurRadius: 15,
-            offset: const Offset(0, -3),
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 20,
+            offset: const Offset(0, -4),
+            spreadRadius: 0,
+          ),
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, -2),
+            spreadRadius: 0,
           ),
         ],
       ),
@@ -408,7 +415,7 @@ class _MainTabScreenState extends State<MainTabScreen> {
   }
 
   Widget _buildBuyerHomeTab() {
-    return const HomeScreenContent();
+    return const BuyerCategoryHomeScreen();
   }
 
   List<Widget> _getSellerTabs() {
@@ -423,7 +430,14 @@ class _MainTabScreenState extends State<MainTabScreen> {
     // Wrap with bottom padding to avoid overlap with bottom nav
     return Padding(
       padding: const EdgeInsets.only(bottom: 120), // Space for bottom nav
-      child: AddListingScreen(promptCounter: _sellPromptCounter),
+      child: AddListingScreen(
+        promptCounter: _sellPromptCounter,
+        onBackToDashboard: () {
+          setState(() {
+            _currentIndex = 0; // Switch to Dashboard tab
+          });
+        },
+      ),
     );
   }
 
@@ -488,18 +502,41 @@ class _MainTabScreenState extends State<MainTabScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Icon(
-                icon,
-                color: isActive ? Colors.orange : Colors.grey.shade600,
-                size: 24,
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  gradient: isActive
+                      ? const LinearGradient(
+                          colors: [Color(0xFF4A90E2), Color(0xFF7B68EE)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        )
+                      : null,
+                  color: isActive ? null : Colors.transparent,
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: isActive
+                      ? [
+                          BoxShadow(
+                            color: const Color(0xFF4A90E2).withOpacity(0.25),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Icon(
+                  icon,
+                  color: isActive ? Colors.white : Colors.grey.shade500,
+                  size: 24,
+                ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 8),
               Text(
                 label,
                 style: TextStyle(
                   fontSize: 12,
-                  fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-                  color: isActive ? Colors.orange : Colors.grey.shade600,
+                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                  color: isActive ? const Color(0xFF4A90E2) : Colors.grey.shade600,
                 ),
                 textAlign: TextAlign.center,
               ),
