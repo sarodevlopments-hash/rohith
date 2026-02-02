@@ -8,13 +8,10 @@ import 'package:image_picker/image_picker.dart';
 import 'package:hive/hive.dart';
 import '../models/listing.dart';
 import '../models/food_category.dart';
-import '../models/measurement_unit.dart';
-import '../models/pack_size.dart';
 import '../models/sell_type.dart';
-import '../models/size_color_combination.dart';
 import '../models/rating.dart';
-import '../screens/cart_screen.dart';
-import '../services/cart_service.dart';
+import '../screens/product_details_screen.dart';
+import '../theme/app_theme.dart';
 
 class BuyerListingCard extends StatefulWidget {
   final Listing listing;
@@ -26,38 +23,12 @@ class BuyerListingCard extends StatefulWidget {
 }
 
 class _BuyerListingCardState extends State<BuyerListingCard> {
-  int selectedQuantity = 1;
-  PackSize? selectedPackSize; // Selected pack size for groceries with multiple packs
-  String? selectedSize; // Selected size for clothing
-  String? selectedColor; // Selected color for clothing
   double? averageFoodRating;
-  double? averageSellerRating;
 
   @override
   void initState() {
     super.initState();
     _loadRatings();
-    // Use post-frame callback to ensure widget is built before auto-selecting
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _autoSelectSizeIfSingle();
-    });
-  }
-
-  void _autoSelectSizeIfSingle() {
-    // Auto-select size if there's only one size available for clothing items
-    if (widget.listing.type == SellType.clothingAndApparel) {
-      final hasCombinations = widget.listing.sizeColorCombinations != null && widget.listing.sizeColorCombinations!.isNotEmpty;
-      final sizes = hasCombinations
-          ? widget.listing.sizeColorCombinations!.map((combo) => combo.size).toList()
-          : (widget.listing.availableSizes ?? []);
-      
-      // Auto-select if there's exactly one size
-      if (sizes.length == 1 && selectedSize == null) {
-        setState(() {
-          selectedSize = sizes.first;
-        });
-      }
-    }
   }
 
   Future<void> _loadRatings() async {
@@ -69,11 +40,9 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
 
     if (ratings.isNotEmpty) {
       final foodRatings = ratings.map((r) => r.foodRating).toList();
-      final sellerRatings = ratings.map((r) => r.sellerRating).toList();
       
       setState(() {
         averageFoodRating = foodRatings.reduce((a, b) => a + b) / foodRatings.length;
-        averageSellerRating = sellerRatings.reduce((a, b) => a + b) / sellerRatings.length;
       });
     }
   }
@@ -89,26 +58,6 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
     }
   }
 
-  String _getButtonText(bool isAvailable) {
-    if (!isAvailable) {
-      if (widget.listing.isLiveKitchen) {
-        if (!widget.listing.isKitchenOpen) return 'Kitchen Closed';
-        if (!widget.listing.hasAvailableCapacity) return 'Fully Booked';
-      }
-      return 'Sold Out';
-    }
-    if (widget.listing.isLiveKitchen) {
-      return 'Order Now • ${widget.listing.preparationTimeText}';
-    }
-    if (widget.listing.isValidBulkFood) {
-      return 'Order Bulk Pack (${widget.listing.bulkServingText})';
-    }
-    if (widget.listing.hasMultiplePackSizes && selectedPackSize != null) {
-      return 'Add ${selectedQuantity} Pack${selectedQuantity > 1 ? 's' : ''} to Cart';
-    }
-    return 'Add to Cart (${selectedQuantity}x)';
-  }
-
   String _getFoodTypeLabel() {
     return widget.listing.category.label;
   }
@@ -119,281 +68,73 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
             widget.listing.originalPrice!) * 100;
   }
 
-  String _getUnitPrice() {
-    // If pack sizes exist, show pack-specific price format
-    if (widget.listing.hasMultiplePackSizes && widget.listing.packSizes != null && widget.listing.packSizes!.isNotEmpty) {
-      if (selectedPackSize != null && widget.listing.measurementUnit != null) {
-        final label = selectedPackSize!.getDisplayLabel(widget.listing.measurementUnit!.shortLabel);
-        return '₹${selectedPackSize!.price.toStringAsFixed(0)} for $label';
-      }
-      // If no pack selected but packs exist, show first pack as example or prompt
-      final firstPack = widget.listing.packSizes!.first;
-      if (widget.listing.measurementUnit != null) {
-        final label = firstPack.getDisplayLabel(widget.listing.measurementUnit!.shortLabel);
-        return 'Select pack size (e.g., ₹${firstPack.price.toStringAsFixed(0)} for $label)';
-      }
-    }
-    // For groceries/vegetables with measurement unit, show "for" format instead of "per"
-    // Use pack size weight if available, otherwise show price for 1 unit
-    if (widget.listing.type == SellType.groceries || widget.listing.type == SellType.vegetables) {
-      if (widget.listing.measurementUnit != null) {
-        // If there's a single pack size (even if not using multiple pack sizes feature)
-        if (widget.listing.packSizes != null && widget.listing.packSizes!.isNotEmpty) {
-          final packSize = widget.listing.packSizes!.first;
-          final label = packSize.getDisplayLabel(widget.listing.measurementUnit!.shortLabel);
-          return '₹${packSize.price.toStringAsFixed(0)} for $label';
-        }
-        // If no pack size, show price for 1 unit of the measurement
-        return '₹${widget.listing.price.toStringAsFixed(0)} for 1 ${widget.listing.measurementUnit!.shortLabel}';
-      }
-    }
-    // Regular items without pack sizes
-    if (widget.listing.measurementUnit != null) {
-      return '₹${widget.listing.price.toStringAsFixed(0)} per ${widget.listing.measurementUnit!.shortLabel}';
-    }
-    return '₹${widget.listing.price.toStringAsFixed(0)} per item';
-  }
-
-  double _getCurrentPrice() {
-    return selectedPackSize?.price ?? widget.listing.price;
-  }
-
-  Future<void> _addToCart() async {
-    // Validate pack size selection for groceries with multiple packs
-    if (widget.listing.hasMultiplePackSizes && selectedPackSize == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a pack size')),
-      );
-      return;
-    }
-
-    // Validate size and color selection for clothing items
-    if (widget.listing.type == SellType.clothingAndApparel) {
-      // Check if we have size-color combinations or fallback to simple lists
-      final hasCombinations = widget.listing.sizeColorCombinations != null && widget.listing.sizeColorCombinations!.isNotEmpty;
-      final hasSizes = hasCombinations 
-          ? widget.listing.sizeColorCombinations!.isNotEmpty
-          : (widget.listing.availableSizes != null && widget.listing.availableSizes!.isNotEmpty);
-      
-      if (hasSizes && selectedSize == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select a size')),
-        );
-        return;
-      }
-      
-      // Check if colors are required for the selected size
-      if (selectedSize != null) {
-        List<String>? colorsForSize;
-        if (hasCombinations) {
-          final combo = widget.listing.sizeColorCombinations!.firstWhere(
-            (c) => c.size == selectedSize,
-            orElse: () => SizeColorCombination(size: '', availableColors: []),
-          );
-          colorsForSize = combo.availableColors;
-        } else {
-          colorsForSize = widget.listing.availableColors;
-        }
-        
-        if (colorsForSize != null && colorsForSize.isNotEmpty && selectedColor == null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Please select a color')),
-          );
-          return;
-        }
-      }
-    }
-
-    // For live kitchen, check if kitchen is open
-    if (widget.listing.isLiveKitchen) {
-      if (!widget.listing.isKitchenOpen) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Kitchen is currently closed. Please try again later.')),
-        );
-        return;
-      }
-      if (!widget.listing.hasAvailableCapacity) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No order slots available. Please try again later.')),
-        );
-        return;
-      }
-    }
-
-    // For bulk items or live kitchen, always use quantity of 1
-    final quantityToAdd = (widget.listing.isValidBulkFood || widget.listing.isLiveKitchen) ? 1 : selectedQuantity;
-
-    if (quantityToAdd > widget.listing.quantity && !widget.listing.isLiveKitchen) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(widget.listing.isValidBulkFood 
-            ? 'This bulk pack is not available'
-            : 'Only ${widget.listing.quantity} items available')),
-      );
-      return;
-    }
-
-    final sellerInCart = CartService.currentSellerId();
-    if (sellerInCart != null && sellerInCart != widget.listing.sellerId) {
-      final clear = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Different seller'),
-          content: const Text(
-            'Your cart contains items from another seller. Please complete or clear the current cart to continue.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Clear cart'),
-            ),
-          ],
-        ),
-      );
-      if (clear != true) return;
-      CartService.clear();
-    }
-
-    await CartService.addItem(
-      widget.listing,
-      quantityToAdd,
-      packSize: selectedPackSize,
-      selectedSize: selectedSize,
-      selectedColor: selectedColor,
-    );
-    if (mounted) {
-      // Don't show notification if already on cart screen
-      // Check by looking for CartScreen in the widget tree
-      bool isOnCartScreen = false;
-      try {
-        final cartScreen = context.findAncestorWidgetOfExactType<CartScreen>();
-        isOnCartScreen = cartScreen != null;
-      } catch (e) {
-        // If check fails, assume we're not on cart screen
-      }
-      
-      if (isOnCartScreen) {
-        return;
-      }
-
-      String message;
-      if (widget.listing.isLiveKitchen) {
-        message = 'Order placed! Preparation time: ${widget.listing.preparationTimeText}';
-      } else if (widget.listing.isValidBulkFood) {
-        message = 'Bulk pack added to cart (${widget.listing.bulkServingText})';
-      } else {
-        message = 'Added to cart';
-      }
-      
-      // Hide any existing snackbar first
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      
-      final scaffoldMessenger = ScaffoldMessenger.of(context);
-      scaffoldMessenger.showSnackBar(
-        SnackBar(
-          content: Text(message),
-          duration: const Duration(seconds: 5),
-          behavior: SnackBarBehavior.fixed,
-          action: SnackBarAction(
-            label: 'View Cart',
-            onPressed: () {
-              scaffoldMessenger.hideCurrentSnackBar();
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const CartScreen()),
-              );
-            },
-          ),
-        ),
-      );
-      
-      // Explicitly dismiss after 5 seconds to ensure it doesn't stay longer
-      Timer(const Duration(seconds: 5), () {
-        if (mounted) {
-          scaffoldMessenger.hideCurrentSnackBar();
-        }
-      });
+  Future<Uint8List> _loadImageBytes(String imagePath) async {
+    if (kIsWeb) {
+      final XFile file = XFile(imagePath);
+      return await file.readAsBytes();
+    } else {
+      final File file = File(imagePath);
+      return await file.readAsBytes();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final discount = _calculateDiscount();
-    // For live kitchen, check kitchen status and capacity
     final isAvailable = widget.listing.isLiveKitchen 
         ? widget.listing.isLiveKitchenAvailable 
         : widget.listing.quantity > 0;
-    final currentPrice = _getCurrentPrice();
+    final currentPrice = widget.listing.price;
+    final imagePath = widget.listing.imagePath;
+    final discount = _calculateDiscount();
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => ProductDetailsScreen(listing: widget.listing),
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 18),
+        decoration: AppTheme.getCardDecoration(elevated: true),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
           // Product Image
           ClipRRect(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
             child: Stack(
               children: [
-                // Get image path based on selected color
-                Builder(
-                  builder: (context) {
-                    final imagePath = widget.listing.getImagePathForColor(selectedColor);
-                    return AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 300),
-                      transitionBuilder: (Widget child, Animation<double> animation) {
-                        return FadeTransition(
-                          opacity: animation,
-                          child: child,
-                        );
-                      },
-                      child: Container(
-                        key: ValueKey<String?>(imagePath ?? 'default'),
-                        height: 200,
-                        width: double.infinity,
-                        color: Colors.grey.shade200,
-                        child: imagePath != null
-                            ? (kIsWeb
-                                ? FutureBuilder<Uint8List>(
-                                    future: _loadImageBytes(imagePath),
-                                    builder: (context, snapshot) {
-                                      if (snapshot.hasData) {
-                                        return Image.memory(
-                                          snapshot.data!,
-                                          fit: BoxFit.cover,
-                                        );
-                                      }
-                                      return const Center(child: CircularProgressIndicator());
-                                    },
-                                  )
-                                : File(imagePath).existsSync()
-                                    ? Image.file(
-                                        File(imagePath),
-                                        fit: BoxFit.cover,
-                                      )
-                                    : const Center(
-                                        child: Icon(Icons.image_not_supported, size: 64),
-                                      ))
-                            : const Center(
-                                child: Icon(Icons.fastfood, size: 64, color: Colors.grey),
-                              ),
-                      ),
-                    );
-                  },
+                Container(
+                  height: 200,
+                  width: double.infinity,
+                  color: Colors.grey.shade200,
+                  child: imagePath != null
+                      ? (kIsWeb
+                          ? FutureBuilder<Uint8List>(
+                              future: _loadImageBytes(imagePath),
+                              builder: (context, snapshot) {
+                                if (snapshot.hasData) {
+                                  return Image.memory(
+                                    snapshot.data!,
+                                    fit: BoxFit.cover,
+                                  );
+                                }
+                                return const Center(child: CircularProgressIndicator());
+                              },
+                            )
+                          : File(imagePath).existsSync()
+                              ? Image.file(
+                                  File(imagePath),
+                                  fit: BoxFit.cover,
+                                )
+                              : const Center(
+                                  child: Icon(Icons.image_not_supported, size: 64),
+                                ))
+                      : const Center(
+                          child: Icon(Icons.fastfood, size: 64, color: Colors.grey),
+                        ),
                 ),
                 // Food Type Indicator (Top Left) - Only for food items, not clothing
                 if (widget.listing.type != SellType.clothingAndApparel)
@@ -402,16 +143,7 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
                     left: 12,
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: _getFoodTypeColor(),
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.2),
-                            blurRadius: 4,
-                          ),
-                        ],
-                      ),
+                      decoration: AppTheme.getBadgeDecoration(_getFoodTypeColor()),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -524,10 +256,7 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
                     right: 12,
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade600,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
+                      decoration: AppTheme.getBadgeDecoration(AppTheme.errorColor),
                       child: Text(
                         '${discount.toStringAsFixed(0)}% OFF',
                         style: const TextStyle(
@@ -563,73 +292,20 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
             ),
           ),
 
-          // Product Details
+          // Product Details - Minimal Info Only
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Product Name & Ratings
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.listing.name,
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black87,
-                            ),
-                          ),
-                          // Show blurred seller name for groceries and vegetables (always hidden in listing view)
-                          if (widget.listing.shouldHideSellerIdentity) ...[
-                            const SizedBox(height: 4),
-                            _buildBlurredSellerName(),
-                          ] else ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              'by ${widget.listing.sellerName}',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.grey.shade600,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    if (averageFoodRating != null) ...[
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.star, color: Colors.orange, size: 16),
-                            const SizedBox(width: 4),
-                            Text(
-                              averageFoodRating!.toStringAsFixed(1),
-                              style: TextStyle(
-                                color: Colors.orange.shade700,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ],
+                // Product Name
+                Text(
+                  widget.listing.name,
+                  style: AppTheme.heading4,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
-
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
 
                 // Price Section
                 Row(
@@ -640,807 +316,92 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
                         '₹${widget.listing.originalPrice!.toStringAsFixed(0)}',
                         style: TextStyle(
                           fontSize: 14,
-                          color: Colors.grey.shade600,
+                          color: AppTheme.lightText,
                           decoration: TextDecoration.lineThrough,
                         ),
                       ),
                       const SizedBox(width: 8),
                     ],
-                    Text(
-                      '₹${currentPrice.toStringAsFixed(0)}',
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.green,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      _getUnitPrice(),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade600,
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: AppTheme.getPriceBadgeDecoration(),
+                      child: Text(
+                        '₹${currentPrice.toStringAsFixed(0)}',
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          letterSpacing: 0.5,
+                        ),
                       ),
                     ),
                   ],
                 ),
 
+                // Discount Badge (if any)
                 if (widget.listing.originalPrice != null) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    'You save ₹${(widget.listing.originalPrice! - widget.listing.price).toStringAsFixed(0)}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.green.shade700,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-
-                // Available Sizes and Colors (for clothing) - Selectable with combinations
-                if (widget.listing.type == SellType.clothingAndApparel) ...[
-                  const SizedBox(height: 12),
-                  // Get sizes from combinations or fallback to availableSizes
-                  Builder(
-                    builder: (context) {
-                      final sizes = widget.listing.sizeColorCombinations != null && widget.listing.sizeColorCombinations!.isNotEmpty
-                          ? widget.listing.sizeColorCombinations!.map((combo) => combo.size).toList()
-                          : (widget.listing.availableSizes ?? []);
-                      
-                      if (sizes.isEmpty) return const SizedBox.shrink();
-                      
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.straighten, size: 16, color: Colors.grey.shade600),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Select Size: ',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.grey.shade700,
-                                ),
-                              ),
-                              if (selectedSize == null)
-                                Text(
-                                  '(Required)',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.red.shade600,
-                                    fontStyle: FontStyle.italic,
-                                  ),
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: sizes.map((size) {
-                              final isSelected = selectedSize == size;
-                              final isFreeSize = size.toLowerCase() == 'free size';
-                              return GestureDetector(
-                                onTap: () {
-                                  setState(() {
-                                    selectedSize = size;
-                                    selectedColor = null; // Reset color when size changes
-                                  });
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                  decoration: BoxDecoration(
-                                    color: isSelected 
-                                        ? (isFreeSize ? Colors.purple.shade600 : Colors.blue.shade600)
-                                        : (isFreeSize ? Colors.purple.shade50 : Colors.blue.shade50),
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: isSelected 
-                                          ? (isFreeSize ? Colors.purple.shade700 : Colors.blue.shade700)
-                                          : (isFreeSize ? Colors.purple.shade200 : Colors.blue.shade200),
-                                      width: isSelected ? 2 : 1,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      if (isFreeSize) ...[
-                                        Icon(
-                                          Icons.all_inclusive,
-                                          size: 16,
-                                          color: isSelected ? Colors.white : Colors.purple.shade700,
-                                        ),
-                                        const SizedBox(width: 4),
-                                      ],
-                                      Text(
-                                        size,
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: isSelected ? Colors.white : (isFreeSize ? Colors.purple.shade700 : Colors.blue.shade700),
-                                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            }).toList(),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                  // Show colors based on selected size
-                  Builder(
-                    builder: (context) {
-                      if (selectedSize == null) return const SizedBox.shrink();
-                      
-                      // Get colors for selected size from combinations
-                      List<String> availableColorsForSize = [];
-                      if (widget.listing.sizeColorCombinations != null && widget.listing.sizeColorCombinations!.isNotEmpty) {
-                        final combo = widget.listing.sizeColorCombinations!.firstWhere(
-                          (c) => c.size == selectedSize,
-                          orElse: () => SizeColorCombination(size: '', availableColors: []),
-                        );
-                        availableColorsForSize = combo.availableColors;
-                        // If no colors found in combination but fallback colors exist, use them
-                        if (availableColorsForSize.isEmpty && widget.listing.availableColors != null && widget.listing.availableColors!.isNotEmpty) {
-                          availableColorsForSize = widget.listing.availableColors!;
-                        }
-                      } else if (widget.listing.availableColors != null) {
-                        // Fallback to all colors if no combinations
-                        availableColorsForSize = widget.listing.availableColors!;
-                      }
-                      
-                      if (availableColorsForSize.isEmpty) return const SizedBox.shrink();
-                      
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              Icon(Icons.palette, size: 16, color: Colors.grey.shade600),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Select Color for $selectedSize: ',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.grey.shade700,
-                                ),
-                              ),
-                              if (selectedColor == null)
-                                Text(
-                                  '(Required)',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.red.shade600,
-                                    fontStyle: FontStyle.italic,
-                                  ),
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: availableColorsForSize.map((color) {
-                              final isSelected = selectedColor == color;
-                              return GestureDetector(
-                                onTap: () {
-                                  setState(() {
-                                    selectedColor = color;
-                                  });
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                  decoration: BoxDecoration(
-                                    color: isSelected ? Colors.pink.shade600 : Colors.pink.shade50,
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: isSelected ? Colors.pink.shade700 : Colors.pink.shade200,
-                                      width: isSelected ? 2 : 1,
-                                    ),
-                                  ),
-                                  child: Text(
-                                    color,
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: isSelected ? Colors.white : Colors.pink.shade700,
-                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                              );
-                            }).toList(),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                ],
-
-                const SizedBox(height: 12),
-
-                // Stock & Type Info
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            widget.listing.isLiveKitchen ? Icons.people_outline : Icons.inventory_2, 
-                            size: 14, 
-                            color: Colors.blue.shade700,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            widget.listing.isLiveKitchen
-                                ? '${widget.listing.remainingCapacity} slots'
-                                : widget.listing.isValidBulkFood 
-                                    ? '${widget.listing.quantity} pack${widget.listing.quantity > 1 ? 's' : ''}'
-                                    : '${widget.listing.quantity} left',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.blue.shade700,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.purple.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            widget.listing.isLiveKitchen ? Icons.restaurant : Icons.category, 
-                            size: 14, 
-                            color: widget.listing.isLiveKitchen ? Colors.deepOrange.shade700 : Colors.purple.shade700,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            widget.listing.type.displayName,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: widget.listing.isLiveKitchen ? Colors.deepOrange.shade700 : Colors.purple.shade700,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-
-                // Bulk Food Info
-                if (widget.listing.isValidBulkFood) ...[
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 6),
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [Colors.purple.shade50, Colors.purple.shade100],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.purple.shade200),
+                      color: AppTheme.errorColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppTheme.errorColor.withOpacity(0.3)),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(
-                                color: Colors.purple.shade600,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Icon(Icons.groups, color: Colors.white, size: 16),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Bulk Food Item',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  Text(
-                                    widget.listing.bulkServingText,
-                                    style: TextStyle(
-                                      color: Colors.purple.shade700,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (widget.listing.portionDescription != null && widget.listing.portionDescription!.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Icon(Icons.local_dining, size: 14, color: Colors.purple.shade600),
-                              const SizedBox(width: 6),
-                              Text(
-                                widget.listing.portionDescription!,
-                                style: TextStyle(
-                                  color: Colors.purple.shade800,
-                                  fontStyle: FontStyle.italic,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.amber.shade100,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.info_outline, size: 12, color: Colors.amber.shade800),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Sold as complete pack only',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.amber.shade900,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-
-                // Live Kitchen Info
-                if (widget.listing.isLiveKitchen) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: widget.listing.isKitchenOpen 
-                            ? [Colors.green.shade50, Colors.green.shade100]
-                            : [Colors.grey.shade100, Colors.grey.shade200],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: widget.listing.isKitchenOpen 
-                            ? Colors.green.shade300 
-                            : Colors.grey.shade400,
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: widget.listing.isKitchenOpen 
-                                      ? [Colors.green.shade400, Colors.green.shade600]
-                                      : [Colors.grey.shade400, Colors.grey.shade600],
-                                ),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Icon(
-                                widget.listing.isKitchenOpen ? Icons.restaurant : Icons.restaurant_outlined,
-                                color: Colors.white,
-                                size: 16,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    widget.listing.isKitchenOpen ? '🔥 Live Kitchen Open' : 'Kitchen Closed',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                      color: widget.listing.isKitchenOpen 
-                                          ? Colors.green.shade800 
-                                          : Colors.grey.shade700,
-                                    ),
-                                  ),
-                                  Text(
-                                    widget.listing.isKitchenOpen 
-                                        ? 'Cooking fresh on order'
-                                        : 'Not accepting orders now',
-                                    style: TextStyle(
-                                      color: widget.listing.isKitchenOpen 
-                                          ? Colors.green.shade700 
-                                          : Colors.grey.shade600,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (widget.listing.isKitchenOpen) ...[
-                          const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              // Preparation Time
-                              Expanded(
-                                child: Container(
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: Colors.orange.shade50,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: Colors.orange.shade200),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.timer, size: 16, color: Colors.orange.shade700),
-                                      const SizedBox(width: 6),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              'Prep Time',
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                color: Colors.orange.shade600,
-                                              ),
-                                            ),
-                                            Text(
-                                              widget.listing.preparationTimeText,
-                                              style: TextStyle(
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.orange.shade800,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              // Available Slots
-                              Expanded(
-                                child: Container(
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: widget.listing.hasAvailableCapacity 
-                                        ? Colors.blue.shade50 
-                                        : Colors.red.shade50,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: widget.listing.hasAvailableCapacity 
-                                          ? Colors.blue.shade200 
-                                          : Colors.red.shade200,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.people_outline, 
-                                        size: 16, 
-                                        color: widget.listing.hasAvailableCapacity 
-                                            ? Colors.blue.shade700 
-                                            : Colors.red.shade700,
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              'Slots',
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                color: widget.listing.hasAvailableCapacity 
-                                                    ? Colors.blue.shade600 
-                                                    : Colors.red.shade600,
-                                              ),
-                                            ),
-                                            Text(
-                                              widget.listing.hasAvailableCapacity 
-                                                  ? '${widget.listing.remainingCapacity} available'
-                                                  : 'Fully booked',
-                                              style: TextStyle(
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.bold,
-                                                color: widget.listing.hasAvailableCapacity 
-                                                    ? Colors.blue.shade800 
-                                                    : Colors.red.shade800,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.amber.shade100,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.info_outline, size: 12, color: Colors.amber.shade800),
-                              const SizedBox(width: 4),
-                              Flexible(
-                                child: Text(
-                                  'Freshly prepared after you order',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.amber.shade900,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-
-                const SizedBox(height: 16),
-
-                // Pack Size Selection (for groceries with multiple packs)
-                if (isAvailable && widget.listing.hasMultiplePackSizes && widget.listing.packSizes != null) ...[
-                  const Text(
-                    'Select Pack Size:',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: widget.listing.packSizes!.map((pack) {
-                      final isSelected = selectedPackSize?.quantity == pack.quantity &&
-                          selectedPackSize?.price == pack.price;
-                      final unitLabel = widget.listing.measurementUnit?.shortLabel ?? '';
-                      return ChoiceChip(
-                        label: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              pack.getDisplayLabel(unitLabel),
-                              style: TextStyle(
-                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                fontSize: 13,
-                              ),
-                            ),
-                            Text(
-                              '₹${pack.price.toStringAsFixed(0)}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: isSelected ? Colors.white : Colors.grey.shade700,
-                              ),
-                            ),
-                          ],
-                        ),
-                        selected: isSelected,
-                        onSelected: (selected) {
-                          setState(() {
-                            selectedPackSize = selected ? pack : null;
-                            // Reset quantity to 1 when pack size changes
-                            selectedQuantity = 1;
-                          });
-                        },
-                        selectedColor: Colors.orange,
-                        labelStyle: TextStyle(
-                          color: isSelected ? Colors.white : Colors.black87,
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-
-                // Quantity Selection (Number of Packs) - Not shown for bulk items or live kitchen (always 1)
-                if (isAvailable && !widget.listing.isValidBulkFood && !widget.listing.isLiveKitchen) ...[
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Text(
-                        'Quantity:',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade700,
-                        ),
-                      ),
-                      Container(
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey.shade300),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.remove, size: 20),
-                              onPressed: selectedQuantity > 1
-                                  ? () {
-                                      setState(() {
-                                        selectedQuantity--;
-                                      });
-                                    }
-                                  : null,
-                              padding: const EdgeInsets.all(8),
-                              constraints: const BoxConstraints(),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                              child: Text(
-                                selectedQuantity.toString(),
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.add, size: 20),
-                              onPressed: selectedQuantity < widget.listing.quantity
-                                  ? () {
-                                      setState(() {
-                                        selectedQuantity++;
-                                      });
-                                    }
-                                  : null,
-                              padding: const EdgeInsets.all(8),
-                              constraints: const BoxConstraints(),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (widget.listing.hasMultiplePackSizes && selectedPackSize != null) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      '${selectedQuantity} pack${selectedQuantity > 1 ? 's' : ''} of ${selectedPackSize!.getDisplayLabel(widget.listing.measurementUnit?.shortLabel ?? '')}',
+                    child: Text(
+                      'Save ₹${(widget.listing.originalPrice! - widget.listing.price).toStringAsFixed(0)}',
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.grey.shade600,
-                        fontStyle: FontStyle.italic,
+                        color: AppTheme.errorColor,
+                        fontWeight: FontWeight.w600,
                       ),
-                    ),
-                  ],
-                  const SizedBox(height: 12),
-                ],
-
-                // Buy Button
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: isAvailable ? _addToCart : null,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: isAvailable 
-                          ? (widget.listing.isLiveKitchen 
-                              ? Colors.green.shade600
-                              : widget.listing.isValidBulkFood 
-                                  ? Colors.purple 
-                                  : Colors.orange)
-                          : Colors.grey,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 2,
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        if (widget.listing.isLiveKitchen && isAvailable) ...[
-                          const Icon(Icons.restaurant, size: 20),
-                          const SizedBox(width: 8),
-                        ] else if (widget.listing.isValidBulkFood && isAvailable) ...[
-                          const Icon(Icons.groups, size: 20),
-                          const SizedBox(width: 8),
-                        ],
-                        Text(
-                          _getButtonText(isAvailable),
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
                     ),
                   ),
-                ),
+                ],
+
+                // Stock Availability (Optional)
+                if (!isAvailable) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade200,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      'Out of Stock',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade700,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ] else if (widget.listing.quantity <= 5) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppTheme.warningColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppTheme.warningColor.withOpacity(0.3)),
+                    ),
+                    child: Text(
+                      'Only ${widget.listing.quantity} left',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.warningColor,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
         ],
       ),
-    );
-  }
-
-  Future<Uint8List> _loadImageBytes(String imagePath) async {
-    if (kIsWeb) {
-      final XFile file = XFile(imagePath);
-      return await file.readAsBytes();
-    } else {
-      final File file = File(imagePath);
-      return await file.readAsBytes();
-    }
-  }
-
-  Widget _buildBlurredSellerName() {
-    // Create a blurred text effect - make seller name unreadable
-    return ClipRect(
-      child: ImageFiltered(
-        imageFilter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-        child: Container(
-          child: Text(
-            'by ${widget.listing.sellerName}',
-            style: TextStyle(
-              fontSize: 13,
-              color: Colors.grey.shade600,
-            ),
-          ),
-        ),
       ),
     );
   }
 }
-
