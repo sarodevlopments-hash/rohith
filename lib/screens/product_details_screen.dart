@@ -15,8 +15,10 @@ import '../screens/cart_screen.dart';
 import '../services/cart_service.dart';
 import '../services/recently_viewed_service.dart';
 import '../services/image_storage_service.dart';
+import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/seller_name_widget.dart';
+import '../main.dart' show navigatorKey;
 
 class ProductDetailsScreen extends StatefulWidget {
   final Listing listing;
@@ -38,12 +40,21 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   @override
   void initState() {
     super.initState();
+    // Product details is a full-screen route with its own bottom CTA.
+    // Ensure global SnackBars don't cover the "Add to Cart" button.
+    NotificationService.pushBottomInset(80);
     _loadRatings();
     // Track recently viewed
     RecentlyViewedService.addToList(widget.listing);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _autoSelectSizeIfSingle();
     });
+  }
+
+  @override
+  void dispose() {
+    NotificationService.popBottomInset();
+    super.dispose();
   }
 
   void _autoSelectSizeIfSingle() {
@@ -202,17 +213,59 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        final messenger = ScaffoldMessenger.of(context);
+        // Don't clear existing snackbars - seller notification should persist
+        // It will be temporarily hidden but will re-appear after this notification dismisses
+        
+        // Store reference to dismiss timer
+        Timer? dismissTimer;
+        
+        // Show the new snackbar - removed action button to prevent duration extension
+        messenger.showSnackBar(
           SnackBar(
-            content: const Text('Added to cart!'),
+            content: InkWell(
+              onTap: () {
+                dismissTimer?.cancel();
+                messenger.hideCurrentSnackBar();
+                // Re-show seller notification after cart notification is dismissed
+                NotificationService.reShowSellerNotificationIfNeeded();
+                // Use global navigator key so navigation works from any screen
+                navigatorKey.currentState?.push(
+                  MaterialPageRoute(builder: (context) => const CartScreen()),
+                );
+              },
+              child: const Padding(
+                padding: EdgeInsets.symmetric(vertical: 6),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Added to cart!  Tap to view cart'),
+                    Icon(Icons.shopping_cart, color: Colors.white, size: 20),
+                  ],
+                ),
+              ),
+            ),
             backgroundColor: AppTheme.successColor,
             behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 5), // Exactly 5 seconds
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            // Removed action button - it was extending the duration
           ),
         );
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (context) => const CartScreen()),
-        );
+        
+        // Force dismiss after exactly 5 seconds and re-show seller notification
+        dismissTimer = Timer(const Duration(seconds: 5), () {
+          if (mounted) {
+            try {
+              messenger.hideCurrentSnackBar();
+              // Re-show seller notification after cart notification dismisses
+              NotificationService.reShowSellerNotificationIfNeeded();
+            } catch (e) {
+              // Ignore if already dismissed, but still try to re-show seller notification
+              NotificationService.reShowSellerNotificationIfNeeded();
+            }
+          }
+        });
       }
     } catch (e) {
       if (mounted) {

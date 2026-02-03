@@ -152,6 +152,9 @@ class _MainTabScreenState extends State<MainTabScreen> {
   @override
   void initState() {
     super.initState();
+    // Keep seller/buyer SnackBars just above the custom bottom navigation bar,
+    // with a minimal, professional-looking gap.
+    NotificationService.pushBottomInset(32);
     // Start Firestore -> Hive sync for orders so buyer/seller status updates work in real time.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       OrderSyncService.start();
@@ -189,6 +192,7 @@ class _MainTabScreenState extends State<MainTabScreen> {
 
   @override
   void dispose() {
+    NotificationService.popBottomInset();
     if (_ordersListener != null) {
       _ordersListenable.removeListener(_ordersListener!);
     }

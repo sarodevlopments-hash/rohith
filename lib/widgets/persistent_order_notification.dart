@@ -25,6 +25,7 @@ class _PersistentOrderNotificationState extends State<PersistentOrderNotificatio
     with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<Offset> _slideAnimation;
+  bool _dismissTriggered = false;
 
   @override
   void initState() {
@@ -92,6 +93,8 @@ class _PersistentOrderNotificationState extends State<PersistentOrderNotificatio
   }
 
   void _viewOrder() {
+    if (_dismissTriggered) return;
+    _dismissTriggered = true;
     // Animate out first, then navigate and dismiss
     _animationController.reverse().then((_) {
       widget.onDismiss();
@@ -107,6 +110,8 @@ class _PersistentOrderNotificationState extends State<PersistentOrderNotificatio
   }
   
   void _dismiss() {
+    if (_dismissTriggered) return;
+    _dismissTriggered = true;
     // Animate out, then dismiss
     _animationController.reverse().then((_) {
       widget.onDismiss();
@@ -185,7 +190,7 @@ class _PersistentOrderNotificationState extends State<PersistentOrderNotificatio
                     ),
                     IconButton(
                       icon: const Icon(Icons.close, color: Colors.white),
-                      onPressed: _dismiss,
+                      onPressed: _dismissTriggered ? null : _dismiss,
                       tooltip: 'Dismiss',
                     ),
                   ],
@@ -215,42 +220,43 @@ class _PersistentOrderNotificationState extends State<PersistentOrderNotificatio
                 Row(
                   children: [
                     // View on Map
-                    if (widget.pickupLocation != null && widget.pickupLocation!.isNotEmpty)
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _openMap,
-                          icon: const Icon(Icons.map, size: 18),
-                          label: const Text('Map'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.white,
-                            side: const BorderSide(color: Colors.white),
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                          ),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: (widget.pickupLocation != null &&
+                                widget.pickupLocation!.isNotEmpty)
+                            ? _openMap
+                            : null,
+                        icon: const Icon(Icons.map, size: 18),
+                        label: const Text('Map'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.green.shade700,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
                         ),
                       ),
-                    if (widget.pickupLocation != null && widget.pickupLocation!.isNotEmpty)
-                      const SizedBox(width: 8),
-                    
+                    ),
+                    const SizedBox(width: 8),
+
                     // Call Seller
-                    if (widget.sellerPhone != null && widget.sellerPhone!.isNotEmpty)
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _callSeller,
-                          icon: const Icon(Icons.phone, size: 18),
-                          label: const Text('Call'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.white,
-                            side: const BorderSide(color: Colors.white),
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                          ),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: (widget.sellerPhone != null &&
+                                widget.sellerPhone!.isNotEmpty)
+                            ? _callSeller
+                            : null,
+                        icon: const Icon(Icons.phone, size: 18),
+                        label: const Text('Call'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.green.shade700,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
                         ),
                       ),
-                    if (widget.sellerPhone != null && widget.sellerPhone!.isNotEmpty)
-                      const SizedBox(width: 8),
-                    
+                    ),
+                    const SizedBox(width: 8),
+
                     // View Order
                     Expanded(
-                      flex: widget.pickupLocation != null && widget.pickupLocation!.isNotEmpty ? 1 : 2,
                       child: ElevatedButton.icon(
                         onPressed: _viewOrder,
                         icon: const Icon(Icons.shopping_bag, size: 18),

@@ -68,6 +68,16 @@ class _CartScreenContentState extends State<CartScreenContent> {
     return firstItem.sellerName;
   }
 
+  @override
+  void initState() {
+    super.initState();
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+  }
+
   Future<void> _checkout() async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) {
@@ -202,7 +212,7 @@ class _CartScreenContentState extends State<CartScreenContent> {
           children: [
             // Cart Header
             _buildCartHeader(),
-            
+
             // Cart Items List
             Expanded(
               child: ListView.builder(
@@ -621,12 +631,16 @@ class _CartScreenContentState extends State<CartScreenContent> {
                         ),
                 ),
               ),
+              const SizedBox(
+                height: kBottomNavigationBarHeight + 72,
+              ), // Reserve space equivalent to bottom nav so seller notification sits at same height as Home
             ],
           ),
         ),
       ),
     );
   }
+
 
   Widget _buildEmptyCart() {
     return Center(
