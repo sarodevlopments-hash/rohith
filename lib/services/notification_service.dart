@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/order.dart';
 import '../models/listing.dart';
+import '../models/seller_inline_notification.dart';
 import '../screens/seller_dashboard_screen.dart';
 import '../screens/order_details_screen.dart';
 import '../services/order_firestore_service.dart';
@@ -17,95 +18,157 @@ class NotificationService {
   static final Box<Listing> _listingBox = Hive.box<Listing>('listingBox');
   static final FlutterLocalNotificationsPlugin _local = FlutterLocalNotificationsPlugin();
   static GlobalKey<NavigatorState>? _navigatorKey;
+  // Bottom inset stack for in-app SnackBar positioning.
+  // MainTabScreen pushes a value to keep the banner above the bottom nav.
+  // Pushed full-screen pages (like ProductDetails) push 0 so CTAs aren't covered.
+  static final List<double> _bottomInsetStack = <double>[0];
+
+  static void pushBottomInset(double inset) {
+    _bottomInsetStack.add(inset);
+  }
+
+  static void popBottomInset() {
+    if (_bottomInsetStack.length > 1) {
+      _bottomInsetStack.removeLast();
+    }
+  }
+
+  static double get _currentBottomInset => _bottomInsetStack.isNotEmpty
+      ? _bottomInsetStack.last
+      : 0;
+  // Legacy fields (top banner overlay) are no longer used.
+  // (Legacy) overlay entry was used when seller notifications were shown as a top banner.
+  // Guard against async race duplicates for seller new-order notifications
+  static final Set<String> _sellerInFlightNotifications = <String>{};
+
+  static final ValueNotifier<SellerInlineNotification?> sellerInlineNotifier =
+      ValueNotifier<SellerInlineNotification?>(null);
+
+  // Track current seller notification to re-show after other notifications dismiss
+  static Order? _currentSellerNotificationOrder;
+  static int _currentSellerNotificationPendingCount = 1;
+
+  /// Simple data model for Cart's inline seller notification (current value).
+  static SellerInlineNotification? get currentSellerInlineNotification =>
+      sellerInlineNotifier.value;
+
+  // When true, Cart screen is active and wants inline banner instead of SnackBar.
+  static bool _cartInlineEnabled = false;
+
   static bool _initialized = false;
   static const String _channelId = 'new_orders_channel';
   static const String _channelName = 'New Orders';
-  
-  // Show in-app notification when new order arrives
-  static bool showOrderNotification(BuildContext? context, Order order) {
+
+  /// Enable/disable Cart-specific inline seller banner (above "You saved" card).
+  /// When enabled, new seller notifications will be sent to [sellerInlineNotifier]
+  /// and the global SnackBar will be suppressed while Cart is visible.
+  static void setCartInlineBannerEnabled(bool enabled) {
+    _cartInlineEnabled = enabled;
+    if (!enabled) {
+      sellerInlineNotifier.value = null;
+    }
+  }
+
+  // Show in-app seller notification, either as top banner or bottom SnackBar
+  static bool showOrderNotification(
+    BuildContext? context,
+    Order order, {
+    int pendingCount = 1,
+  }) {
+    // If Cart is active, publish inline banner and SKIP SnackBar (to avoid duplicate confirmations).
+    if (_cartInlineEnabled) {
+      final data = SellerInlineNotification(order: order, pendingCount: pendingCount);
+      sellerInlineNotifier.value = data;
+      debugPrint(
+        '[NotificationService] Published Cart inline seller banner for order: ${order.orderId} (pending: $pendingCount)',
+      );
+      return true;
+    }
+
+    // Default behavior when Cart is not active: bottom SnackBar as primary notification.
+    return _showSellerSnackBar(order, pendingCount: pendingCount);
+  }
+
+  // Re-show seller notification if it was interrupted by another notification
+  static void _reShowSellerNotificationIfNeeded() {
+    if (_currentSellerNotificationOrder != null) {
+      debugPrint('[NotificationService] Re-showing seller notification for order: ${_currentSellerNotificationOrder!.orderId}');
+      // Small delay to ensure previous SnackBar is fully dismissed
+      Future.delayed(const Duration(milliseconds: 300), () {
+        _showSellerSnackBar(
+          _currentSellerNotificationOrder!,
+          pendingCount: _currentSellerNotificationPendingCount,
+        );
+      });
+    }
+  }
+
+  // Bottom floating SnackBar implementation (default)
+  static bool _showSellerSnackBar(
+    Order order, {
+    int pendingCount = 1,
+  }) {
     // ALWAYS use navigator key context (more stable than passed context)
     final scaffoldContext = _navigatorKey?.currentContext;
     if (scaffoldContext == null || !scaffoldContext.mounted) {
       debugPrint('[NotificationService] No valid navigator context for showing notification. Navigator key: ${_navigatorKey != null}');
       return false;
     }
-    
-      debugPrint('[NotificationService] Showing SnackBar notification for order: ${order.orderId}');
-      debugPrint('[NotificationService] ScaffoldMessenger context: ${scaffoldContext.toString()}');
-      try {
-        final messenger = ScaffoldMessenger.of(scaffoldContext);
-        debugPrint('[NotificationService] Got ScaffoldMessenger, showing SnackBar');
-        // Don't clear existing snackbars - just show the new one (it will replace if needed)
-        messenger.showSnackBar(
+
+    debugPrint('[NotificationService] Showing SnackBar notification for order: ${order.orderId}');
+    debugPrint('[NotificationService] ScaffoldMessenger context: ${scaffoldContext.toString()}');
+    try {
+      // Track current seller notification for re-showing after interruptions
+      _currentSellerNotificationOrder = order;
+      _currentSellerNotificationPendingCount = pendingCount;
+
+      final messenger = ScaffoldMessenger.of(scaffoldContext);
+      debugPrint('[NotificationService] Got ScaffoldMessenger, showing SnackBar');
+      final mediaQuery = MediaQuery.of(scaffoldContext);
+      final bottomSafe = mediaQuery.padding.bottom;
+      // Slightly overlap into the Buyer/Seller segmented control zone for a tighter, more "system bar"
+      // appearance while still respecting safe area. This reduces the perceived empty gap.
+      final effectiveInset = (_currentBottomInset - 8).clamp(0.0, double.infinity);
+      final bottomMargin = bottomSafe + effectiveInset;
+      final safeCount = pendingCount < 1 ? 1 : pendingCount;
+      final countLabel = safeCount > 10 ? '10+' : '$safeCount';
+      final showCount = safeCount > 1;
+      final pendingText =
+          showCount ? '$countLabel orders pending approval' : null;
+
+      // Don't clear existing snackbars - just show the new one (it will replace if needed)
+      messenger.showSnackBar(
         SnackBar(
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    (order.isLiveKitchenOrder ?? false) ? Icons.restaurant : Icons.notifications_active, 
-                    color: Colors.white, 
-                    size: 24
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      (order.isLiveKitchenOrder ?? false) 
-                          ? '🔥 Live Kitchen Order!'
-                          : 'New Order Received!',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          behavior: SnackBarBehavior.floating,
+          padding: EdgeInsets.zero,
+          margin: EdgeInsets.fromLTRB(
+            16,
+            0,
+            16,
+            bottomMargin,
+          ), // Lift above bottom nav / sticky actions with smooth gap
+          // Persist until user takes action - seller must acknowledge new orders
+          duration: const Duration(days: 1), // Very long duration - dismisses only on user action
+          content: _NewOrderNotificationCard(
+            title: (order.isLiveKitchenOrder ?? false)
+                ? (showCount
+                    ? 'New Live Kitchen Orders'
+                    : 'New Live Kitchen Order')
+                : (showCount ? 'New Orders Received' : 'New Order Received'),
+            orderLine:
                 '${order.foodName}${(order.isLiveKitchenOrder ?? false) ? "" : " × ${order.quantity}"} - ₹${order.pricePaid.toStringAsFixed(0)}',
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: Colors.white,
-                ),
-              ),
-              if (order.isLiveKitchenOrder ?? false) ...[
-                const SizedBox(height: 4),
-                Text(
-                  'Status: ${order.statusDisplayText}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.white.withOpacity(0.9),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-              const SizedBox(height: 4),
-              Text(
-                'Order ID: ${order.orderId.length > 6 ? order.orderId.substring(order.orderId.length - 6) : order.orderId}',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.white.withOpacity(0.8),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: Colors.orange,
-          duration: const Duration(seconds: 30), // Longer duration so user can see it
-          behavior: SnackBarBehavior.floating, // Make it floating so it's more visible
-          margin: const EdgeInsets.all(16), // Add margin for floating behavior
-          action: SnackBarAction(
-            label: 'View',
-            textColor: Colors.white,
-            onPressed: () {
+            orderId: order.orderId.length > 6
+                ? order.orderId.substring(order.orderId.length - 6)
+                : order.orderId,
+            pendingText: pendingText,
+            onView: () {
               // Dismiss the snackbar
               ScaffoldMessenger.of(scaffoldContext).hideCurrentSnackBar();
               // Navigate to seller dashboard where they can accept/reject orders
-              final sellerId = order.sellerId.isNotEmpty 
-                  ? order.sellerId 
+              final sellerId = order.sellerId.isNotEmpty
+                  ? order.sellerId
                   : FirebaseAuth.instance.currentUser?.uid ?? '';
               if (sellerId.isNotEmpty && scaffoldContext.mounted) {
                 Navigator.push(
@@ -128,6 +191,8 @@ class NotificationService {
     }
   }
 
+  // (Legacy) Top banner overlay implementation removed from active use.
+
   // Track shown notifications to avoid duplicates (persist across app sessions)
   static final Set<String> _shownNotifications = <String>{};
   static final Map<String, DateTime> _lastShownAt = <String, DateTime>{};
@@ -143,6 +208,12 @@ class NotificationService {
     _dismissedNotifications.add(notificationKey); // Mark as explicitly dismissed
     _shownNotifications.add(notificationKey);
     _lastShownAt[notificationKey] = DateTime.now();
+    
+    // Clear tracked seller notification if this is the current one
+    if (_currentSellerNotificationOrder?.orderId == orderId) {
+      _currentSellerNotificationOrder = null;
+      _currentSellerNotificationPendingCount = 1;
+    }
     
     debugPrint('[NotificationService] Dismissed notification for order: $orderId');
     debugPrint('[NotificationService] Added to dismissed list, will not show again');
@@ -161,6 +232,11 @@ class NotificationService {
     
     // Dismiss platform-specific notifications
     _local.cancel(orderId.hashCode); // Use a consistent ID for cancellation
+  }
+
+  // Public method to re-show seller notification after other notifications dismiss
+  static void reShowSellerNotificationIfNeeded() {
+    _reShowSellerNotificationIfNeeded();
   }
   static void registerNavigatorKey(GlobalKey<NavigatorState> navKey) {
     _navigatorKey = navKey;
@@ -320,6 +396,13 @@ class NotificationService {
         debugPrint('[NotificationService] Order ${order.orderId} was dismissed, skipping');
         continue;
       }
+
+      // Skip if a notification for this order is already in-flight (prevents duplicate SnackBars
+      // when checkForNewOrders is invoked from multiple listeners at nearly the same time).
+      if (_sellerInFlightNotifications.contains(notificationKey)) {
+        debugPrint('[NotificationService] Notification for ${order.orderId} already in-flight, skipping');
+        continue;
+      }
       
       // For pending orders, allow re-showing after a short delay to prevent spam
       // This ensures notifications persist until action is taken
@@ -405,7 +488,12 @@ class NotificationService {
         final notificationContext = _navigatorKey?.currentContext;
         if (notificationContext != null && notificationContext.mounted) {
           // Try to show notification first, only mark as shown if successful
-          final success = await _showLocalNotification(order, notificationContext);
+          _sellerInFlightNotifications.add(notificationKey);
+          final success = await _showLocalNotification(
+            order,
+            notificationContext,
+            pendingCount: orders.length,
+          );
           if (success) {
             // Wait a moment to ensure SnackBar is actually displayed before marking as shown
             await Future.delayed(const Duration(milliseconds: 100));
@@ -418,6 +506,7 @@ class NotificationService {
             debugPrint('[NotificationService] Failed to show notification for order: ${order.orderId}');
             // Don't mark as shown if it failed, so it can retry
           }
+          _sellerInFlightNotifications.remove(notificationKey);
         } else {
           debugPrint('[NotificationService] No valid navigator context available, cannot show notification. Navigator key: ${_navigatorKey != null}');
         }
@@ -430,7 +519,11 @@ class NotificationService {
     }
   }
 
-  static Future<bool> _showLocalNotification(Order order, BuildContext context) async {
+  static Future<bool> _showLocalNotification(
+    Order order,
+    BuildContext context, {
+    int pendingCount = 1,
+  }) async {
     await init();
 
     // Web fallback: show in-app banner/snackbar
@@ -440,7 +533,7 @@ class NotificationService {
       if (notificationContext != null && notificationContext.mounted) {
         debugPrint('[NotificationService] Web: Showing notification with navigator context');
         try {
-          showOrderNotification(notificationContext, order);
+          showOrderNotification(notificationContext, order, pendingCount: pendingCount);
           return true; // Successfully shown
         } catch (e) {
           debugPrint('[NotificationService] Web: Error showing notification: $e');
@@ -555,96 +648,58 @@ class NotificationService {
                 fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(height: 12),
-            if (sellerPhone.isNotEmpty) ...[
-              InkWell(
-                onTap: () async {
-                  final cleanedPhone = sellerPhone.replaceAll(RegExp(r'[^\d+]'), '');
-                  final telUrl = 'tel:$cleanedPhone';
-                  final uri = Uri.parse(telUrl);
-                  if (await canLaunchUrl(uri)) {
-                    await launchUrl(uri);
-                  }
-                },
-                child: Row(
-                  children: [
-                    Icon(Icons.phone, size: 18, color: Colors.white),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Seller Phone: $sellerPhone',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: Colors.white,
-                              decoration: TextDecoration.underline,
-                            ),
-                          ),
-                          const Text(
-                            'Tap to call',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.white70,
-                              fontStyle: FontStyle.italic,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+            const SizedBox(height: 8),
+            Text(
+              'Order ID: ${order.orderId} • ${order.userId}',
+              style: const TextStyle(
+                fontSize: 12,
+                color: Colors.white70,
+                fontWeight: FontWeight.w500,
               ),
-              const SizedBox(height: 8),
-            ],
-            if (pickupLocation.isNotEmpty) ...[
-              InkWell(
-                onTap: () async {
-                  final isCoordinates = RegExp(r'^-?\d+\.?\d*,\s*-?\d+\.?\d*$').hasMatch(pickupLocation.trim());
-                  final googleMapsUrl = isCoordinates
-                      ? 'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(pickupLocation)}'
-                      : 'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(pickupLocation)}';
-                  final uri = Uri.parse(googleMapsUrl);
-                  if (await canLaunchUrl(uri)) {
-                    await launchUrl(uri, mode: LaunchMode.externalApplication);
-                  }
-                },
-                child: Row(
-                  children: [
-                    Icon(Icons.location_on, size: 18, color: Colors.white),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Pickup: ${pickupLocation.length > 30 ? pickupLocation.substring(0, 30) + "..." : pickupLocation}',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: Colors.white,
-                              decoration: TextDecoration.underline,
-                            ),
-                          ),
-                          const Text(
-                            'Tap to open in Google Maps',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.white70,
-                              fontStyle: FontStyle.italic,
-                            ),
-                          ),
-                        ],
-                      ),
+            ),
+            if (sellerPhone.isNotEmpty || pickupLocation.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  if (sellerPhone.isNotEmpty)
+                    _BuyerNotificationActionChip(
+                      icon: Icons.phone,
+                      label: sellerPhone,
+                      onTap: () async {
+                        final cleanedPhone = sellerPhone.replaceAll(RegExp(r'[^\d+]'), '');
+                        final telUrl = 'tel:$cleanedPhone';
+                        final uri = Uri.parse(telUrl);
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(uri);
+                        }
+                      },
                     ),
-                  ],
-                ),
+                  if (sellerPhone.isNotEmpty && pickupLocation.isNotEmpty)
+                    const SizedBox(width: 8),
+                  if (pickupLocation.isNotEmpty)
+                    _BuyerNotificationActionChip(
+                      icon: Icons.location_on,
+                      label: 'View on Maps',
+                      onTap: () async {
+                        final isCoordinates = RegExp(r'^-?\d+\.?\d*,\s*-?\d+\.?\d*$')
+                            .hasMatch(pickupLocation.trim());
+                        final googleMapsUrl = isCoordinates
+                            ? 'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(pickupLocation)}'
+                            : 'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(pickupLocation)}';
+                        final uri = Uri.parse(googleMapsUrl);
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        }
+                      },
+                    ),
+                ],
               ),
             ],
           ],
         ),
         backgroundColor: Colors.green.shade700,
-        duration: const Duration(seconds: 30), // Longer duration so buyer can see it
+        // Persist until user takes action - buyer must acknowledge order acceptance
+        duration: const Duration(days: 1), // Very long duration - dismisses only on user action
         behavior: SnackBarBehavior.floating, // Make it floating so it's more visible
         margin: const EdgeInsets.all(16), // Add margin for floating behavior
         action: SnackBarAction(
@@ -738,6 +793,235 @@ class NotificationService {
         debugPrint('Failed to get seller details for order ${order.orderId}: $e');
       }
     }
+  }
+}
+
+class _NewOrderNotificationCard extends StatelessWidget {
+  final String title;
+  final String orderLine;
+  final String orderId;
+  final String? pendingText;
+  final VoidCallback onView;
+
+  const _NewOrderNotificationCard({
+    Key? key,
+    required this.title,
+    required this.orderLine,
+    required this.orderId,
+    this.pendingText,
+    required this.onView,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    // Warm orange (brand-like) background for the seller new-order alert.
+    // Keep high-contrast white foreground for accessibility.
+    const Color backgroundColor = Color(0xFFF57C00); // warm orange
+    const Color onBackgroundColor = Colors.white;
+
+    return Material(
+      color: Colors.transparent,
+      elevation: 0,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: backgroundColor,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.16),
+              blurRadius: 18,
+              spreadRadius: 1,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: onBackgroundColor.withOpacity(0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.notifications_active_rounded,
+                color: onBackgroundColor,
+                size: 18,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: onBackgroundColor,
+                        ) ??
+                        TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: onBackgroundColor,
+                        ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    orderLine,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: onBackgroundColor.withOpacity(0.95),
+                        ) ??
+                        TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: onBackgroundColor.withOpacity(0.95),
+                        ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (pendingText != null || orderId.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (pendingText != null) ...[
+                          Flexible(
+                            child: Text(
+                              pendingText!,
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                    color: onBackgroundColor.withOpacity(0.9),
+                                  ) ??
+                                  TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                    color: onBackgroundColor.withOpacity(0.9),
+                                  ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                        if (pendingText != null && orderId.isNotEmpty)
+                          Text(
+                            ' • ',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: onBackgroundColor.withOpacity(0.6),
+                            ),
+                          ),
+                        if (orderId.isNotEmpty)
+                          Flexible(
+                            child: Text(
+                              'ID: $orderId',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                    color: onBackgroundColor.withOpacity(0.8),
+                                  ) ??
+                                  TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                    color: onBackgroundColor.withOpacity(0.8),
+                                  ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            TextButton(
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                backgroundColor: onBackgroundColor,
+                foregroundColor: backgroundColor,
+                minimumSize: const Size(0, 0),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              onPressed: onView,
+              child: Text(
+                'View',
+                style: theme.textTheme.labelMedium?.copyWith(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ) ??
+                    const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BuyerNotificationActionChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _BuyerNotificationActionChip({
+    Key? key,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: Colors.green.shade700,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

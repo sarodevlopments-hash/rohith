@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -8,6 +9,7 @@ import 'order_firestore_service.dart';
 class AcceptedOrderNotificationService {
   static final Set<String> _dismissedNotifications = {};
   static final Set<String> _shownNotifications = {};
+  static final Set<String> _inFlightNotifications = {}; // Prevent async race duplicates
   static final Map<String, String> _lastShownStatus = {}; // Track last shown status per order
   static OverlayEntry? _currentOverlay;
   static GlobalKey<NavigatorState>? _navigatorKey;
@@ -17,15 +19,29 @@ class AcceptedOrderNotificationService {
   }
 
   static void dismissNotification(String orderId) {
-    final notificationKey = 'accepted_$orderId';
+    // Be tolerant: callers may accidentally pass "accepted_<id>" instead of "<id>"
+    final normalizedOrderId =
+        orderId.startsWith('accepted_') ? orderId.substring('accepted_'.length) : orderId;
+    final notificationKey = 'accepted_$normalizedOrderId';
+
+    // Idempotent: if already dismissed, do nothing (prevents double/triple logs/calls).
+    if (_dismissedNotifications.contains(notificationKey)) {
+      return;
+    }
+
     _dismissedNotifications.add(notificationKey);
-    // Also mark as shown so it won't show again
-    _shownNotifications.remove(notificationKey);
+    // Ensure it's treated as shown so it won't show again (also persist across restarts)
+    _shownNotifications.add(notificationKey);
+    if (Hive.isBoxOpen('acceptedOrderNotificationsBox')) {
+      Hive.box('acceptedOrderNotificationsBox').put(notificationKey, true);
+    }
     // Hide notification (with a small delay to allow animation to complete)
     Future.delayed(const Duration(milliseconds: 350), () {
       _hideNotification();
     });
-    debugPrint('[AcceptedOrderNotification] Notification dismissed for order $orderId');
+    debugPrint(
+      '[AcceptedOrderNotification] Notification dismissed for order $normalizedOrderId (key: $notificationKey)',
+    );
   }
 
   static void _hideNotification() {
@@ -49,15 +65,46 @@ class AcceptedOrderNotificationService {
 
     final ordersBox = Hive.box<Order>('ordersBox');
     if (!ordersBox.isOpen) return;
+    final shownBox = Hive.isBoxOpen('acceptedOrderNotificationsBox')
+        ? Hive.box('acceptedOrderNotificationsBox')
+        : null;
 
     final acceptedOrders = ordersBox.values.where((order) {
       // Check if order is for this buyer and was recently accepted
       final isForBuyer = order.userId == userId;
       
-      // Check if this is a Live Kitchen order
-      final isLiveKitchen = order.isLiveKitchenOrder ?? false;
+      // STRICT: Never show for pending/payment statuses - only show when seller has actually accepted
+      // Exclude these statuses explicitly: PaymentPending, PaymentCompleted, AwaitingSellerConfirmation
+      final pendingStatuses = ['PaymentPending', 'PaymentCompleted', 'AwaitingSellerConfirmation'];
+      if (pendingStatuses.contains(order.orderStatus)) {
+        debugPrint('[AcceptedOrderNotification] Order ${order.orderId} is still pending (status: ${order.orderStatus}), skipping');
+        return false;
+      }
       
-      // For regular orders: check for AcceptedBySeller or Confirmed
+      // CRITICAL: For regular orders, verify seller actually responded (has sellerRespondedAt timestamp)
+      // This ensures we only show for orders that were genuinely accepted by the seller
+      final isLiveKitchen = order.isLiveKitchenOrder ?? false;
+      if (!isLiveKitchen) {
+        // Regular orders MUST have sellerRespondedAt timestamp to be considered accepted
+        if (order.sellerRespondedAt == null) {
+          debugPrint('[AcceptedOrderNotification] Order ${order.orderId} has no sellerRespondedAt timestamp, skipping (not actually accepted yet)');
+          return false;
+        }
+        // Verify seller responded AFTER the order was purchased (not before)
+        final orderTime = order.paymentCompletedAt ?? order.purchasedAt;
+        if (order.sellerRespondedAt!.isBefore(orderTime) || 
+            order.sellerRespondedAt!.difference(orderTime).inSeconds < 1) {
+          debugPrint('[AcceptedOrderNotification] Order ${order.orderId} sellerRespondedAt is invalid (before purchase), skipping');
+          return false;
+        }
+        // Only show if seller responded recently (within last hour) - prevents showing old notifications
+        if (order.sellerRespondedAt!.isBefore(DateTime.now().subtract(const Duration(hours: 1)))) {
+          debugPrint('[AcceptedOrderNotification] Order ${order.orderId} seller responded too long ago, skipping');
+          return false;
+        }
+      }
+      
+      // For regular orders: ONLY check for AcceptedBySeller or Confirmed
       // For Live Kitchen orders: check for Preparing, ReadyForPickup, or ReadyForDelivery
       // (OrderReceived is too early - seller hasn't accepted yet)
       final isAccepted = isLiveKitchen
@@ -71,10 +118,12 @@ class AcceptedOrderNotificationService {
       final orderTime = order.paymentCompletedAt ?? order.purchasedAt;
       final isRecent = orderTime.isAfter(DateTime.now().subtract(const Duration(days: 7)));
       
-      // Check if already dismissed
+      // Check if already dismissed or persisted as shown - STRICT check
       final notificationKey = 'accepted_${order.orderId}';
-      if (_dismissedNotifications.contains(notificationKey)) {
-        debugPrint('[AcceptedOrderNotification] Order ${order.orderId} was dismissed, skipping');
+      if (_dismissedNotifications.contains(notificationKey) ||
+          _shownNotifications.contains(notificationKey) ||
+          (shownBox?.get(notificationKey) == true)) {
+        debugPrint('[AcceptedOrderNotification] Order ${order.orderId} was dismissed/already shown (persisted), skipping');
         return false;
       }
       
@@ -100,9 +149,10 @@ class AcceptedOrderNotificationService {
         // 2. Status has changed to a more important status (e.g., Preparing -> ReadyForPickup)
         debugPrint('[AcceptedOrderNotification] Live Kitchen order ${order.orderId} status: ${order.orderStatus}, last shown: $lastStatus - will show notification');
       } else {
-        // For regular orders, only show once
-        if (_shownNotifications.contains(notificationKey)) {
-          debugPrint('[AcceptedOrderNotification] Order ${order.orderId} was already shown, skipping');
+        // For regular orders, only show once (even across app restarts)
+        if (_shownNotifications.contains(notificationKey) ||
+            (shownBox?.get(notificationKey) == true)) {
+          debugPrint('[AcceptedOrderNotification] Order ${order.orderId} was already shown (persisted), skipping');
           return false;
         }
       }
@@ -128,32 +178,113 @@ class AcceptedOrderNotificationService {
     }
 
     final notificationKey = 'accepted_${order.orderId}';
+
+    // Guard against async races: multiple triggers can call _showNotification while we're
+    // awaiting Firestore. This prevents inserting multiple overlays for the same order.
+    if (_inFlightNotifications.contains(notificationKey)) {
+      debugPrint('[AcceptedOrderNotification] Notification for ${order.orderId} already in-flight, skipping');
+      return;
+    }
+    _inFlightNotifications.add(notificationKey);
+
     if (_shownNotifications.contains(notificationKey)) {
       debugPrint('[AcceptedOrderNotification] Notification for ${order.orderId} already shown, skipping');
+      _inFlightNotifications.remove(notificationKey);
       return;
     }
     if (_dismissedNotifications.contains(notificationKey)) {
       debugPrint('[AcceptedOrderNotification] Notification for ${order.orderId} was dismissed, skipping');
+      _inFlightNotifications.remove(notificationKey);
       return;
     }
 
-    // Get seller details from Firestore
+    // Check if this is a Live Kitchen order (needed for Firestore validation)
+    final isLiveKitchen = order.isLiveKitchenOrder ?? false;
+
+    // Get seller details from Firestore and verify status
     String? sellerPhone;
     String? pickupLocation;
+    String? firestoreStatus;
 
     try {
       final doc = await OrderFirestoreService.doc(order.orderId).get();
       if (doc.exists) {
         final data = doc.data();
+        firestoreStatus = data?['orderStatus'] as String?;
         sellerPhone = data?['sellerPhone'] as String?;
         pickupLocation = data?['sellerPickupLocation'] as String?;
+        
+        // CRITICAL: Verify Firestore status matches - if it's pending, don't show notification
+        if (firestoreStatus != null) {
+          final pendingStatuses = ['PaymentPending', 'PaymentCompleted', 'AwaitingSellerConfirmation'];
+          if (pendingStatuses.contains(firestoreStatus)) {
+            debugPrint('[AcceptedOrderNotification] Order ${order.orderId} Firestore status is pending (${firestoreStatus}), aborting notification');
+            _inFlightNotifications.remove(notificationKey);
+            return;
+          }
+          // For regular orders, verify Firestore status is actually accepted
+          if (!isLiveKitchen && firestoreStatus != 'AcceptedBySeller' && firestoreStatus != 'Confirmed') {
+            debugPrint('[AcceptedOrderNotification] Order ${order.orderId} Firestore status is not accepted (${firestoreStatus}), aborting notification');
+            _inFlightNotifications.remove(notificationKey);
+            return;
+          }
+        }
       }
     } catch (e) {
       debugPrint('Failed to get seller details for order ${order.orderId}: $e');
+      // If Firestore check fails, continue with local validation (which is already strict)
+      // This ensures notifications still work if Firestore is temporarily unavailable
     }
 
     // Only show if we have at least seller name
-    if (order.sellerName.isEmpty || order.sellerName == '') return;
+    if (order.sellerName.isEmpty || order.sellerName == '') {
+      _inFlightNotifications.remove(notificationKey);
+      return;
+    }
+
+    // FINAL CHECK: Verify order is still accepted before showing (prevent race conditions)
+    final pendingStatuses = ['PaymentPending', 'PaymentCompleted', 'AwaitingSellerConfirmation'];
+    if (pendingStatuses.contains(order.orderStatus)) {
+      debugPrint('[AcceptedOrderNotification] Order ${order.orderId} status changed to pending (${order.orderStatus}), aborting notification');
+      _inFlightNotifications.remove(notificationKey);
+      return;
+    }
+    
+    // CRITICAL: For regular orders, verify seller actually responded before showing
+    if (!isLiveKitchen) {
+      if (order.sellerRespondedAt == null) {
+        debugPrint('[AcceptedOrderNotification] Order ${order.orderId} has no sellerRespondedAt, aborting notification');
+        _inFlightNotifications.remove(notificationKey);
+        return;
+      }
+      // Verify seller responded recently (within last hour)
+      if (order.sellerRespondedAt!.isBefore(DateTime.now().subtract(const Duration(hours: 1)))) {
+        debugPrint('[AcceptedOrderNotification] Order ${order.orderId} seller responded too long ago, aborting notification');
+        _inFlightNotifications.remove(notificationKey);
+        return;
+      }
+    }
+    
+    final isStillAccepted = isLiveKitchen
+        ? (order.orderStatus == 'Preparing' || 
+           order.orderStatus == 'ReadyForPickup' || 
+           order.orderStatus == 'ReadyForDelivery')
+        : (order.orderStatus == 'AcceptedBySeller' || 
+           order.orderStatus == 'Confirmed');
+    
+    if (!isStillAccepted) {
+      debugPrint('[AcceptedOrderNotification] Order ${order.orderId} is not accepted (status: ${order.orderStatus}), aborting notification');
+      _inFlightNotifications.remove(notificationKey);
+      return;
+    }
+
+    // Mark as shown IMMEDIATELY before showing to prevent duplicates
+    _shownNotifications.add(notificationKey);
+    if (Hive.isBoxOpen('acceptedOrderNotificationsBox')) {
+      Hive.box('acceptedOrderNotificationsBox').put(notificationKey, true);
+    }
+    // Track the status for which we showed the notification (for Live Kitchen status change tracking)
+    _lastShownStatus[order.orderId] = order.orderStatus;
 
     final overlayState = Overlay.of(context);
 
@@ -168,7 +299,8 @@ class AcceptedOrderNotificationService {
             sellerPhone: sellerPhone,
             pickupLocation: pickupLocation,
             onDismiss: () {
-              dismissNotification(notificationKey);
+              // Pass the raw orderId so dismissNotification builds the correct key.
+              dismissNotification(order.orderId);
             },
           ),
         ),
@@ -176,10 +308,10 @@ class AcceptedOrderNotificationService {
     );
 
     overlayState.insert(_currentOverlay!);
-    _shownNotifications.add(notificationKey);
-    // Track the status for which we showed the notification (for Live Kitchen status change tracking)
-    _lastShownStatus[order.orderId] = order.orderStatus;
     debugPrint('[AcceptedOrderNotification] Notification shown for order ${order.orderId} with status ${order.orderStatus}');
+    // Notification persists until user takes action (dismisses manually or taps View Order/Map/Call)
+
+    _inFlightNotifications.remove(notificationKey);
   }
 
   static void clearShownNotifications() {

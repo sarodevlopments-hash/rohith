@@ -12,6 +12,7 @@ import '../services/order_firestore_service.dart';
 import '../services/web_order_broadcast.dart';
 import '../services/user_service.dart';
 import '../services/seller_profile_service.dart';
+import '../services/accepted_order_notification_service.dart';
 
 class CartPaymentScreen extends StatefulWidget {
   final List<CartItemData> items;
@@ -236,6 +237,8 @@ class _CartPaymentScreenState extends State<CartPaymentScreen> {
       CartService.clear();
       if (mounted) {
         setState(() => _isProcessing = false);
+        // Hide any previous buyer "Order Accepted" banner so it doesn't overlap this new payment flow.
+        AcceptedOrderNotificationService.reset();
         _showWaitingPopup(order.orderId);
       }
 

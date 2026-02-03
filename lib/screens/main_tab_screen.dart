@@ -152,6 +152,9 @@ class _MainTabScreenState extends State<MainTabScreen> {
   @override
   void initState() {
     super.initState();
+    // Keep seller/buyer SnackBars just above the custom bottom navigation bar,
+    // with a minimal, professional-looking gap.
+    NotificationService.pushBottomInset(32);
     // Start Firestore -> Hive sync for orders so buyer/seller status updates work in real time.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       OrderSyncService.start();
@@ -183,19 +186,13 @@ class _MainTabScreenState extends State<MainTabScreen> {
       }
     };
     _ordersListenable.addListener(_ordersListener!);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final userId = FirebaseAuth.instance.currentUser?.uid;
-      if (userId != null && mounted) {
-        // Always check for seller notifications (new orders) regardless of tab
-        NotificationService.checkForNewOrders(context, userId);
-        // Also check for buyer notifications (accepted orders) - use persistent notification
-        AcceptedOrderNotificationService.checkForAcceptedOrders(context);
-      }
-    });
+    // Trigger a single initial check after first frame; subsequent checks come from the Hive listener.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _ordersListener?.call());
   }
 
   @override
   void dispose() {
+    NotificationService.popBottomInset();
     if (_ordersListener != null) {
       _ordersListenable.removeListener(_ordersListener!);
     }

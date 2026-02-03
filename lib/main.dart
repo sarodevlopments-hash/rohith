@@ -99,6 +99,8 @@ void main() async {
     await Hive.openBox<ScheduledListing>('scheduledListingsBox');
     // ✅ Initialize recently viewed box for persistence
     await Hive.openBox<String>('recentlyViewedBox');
+    // ✅ Track which accepted-order notifications have already been shown (buyer side)
+    await Hive.openBox('acceptedOrderNotificationsBox');
 
     // ✅ Init local notifications (foreground/heads-up)
     await NotificationService.init();
@@ -160,6 +162,7 @@ void main() async {
                       await Hive.deleteBoxFromDisk('usersBox');
                       await Hive.deleteBoxFromDisk('cartBox');
                       await Hive.deleteBoxFromDisk('scheduledListingsBox');
+                      await Hive.deleteBoxFromDisk('acceptedOrderNotificationsBox');
                       await Hive.deleteBoxFromDisk('recentlyViewedBox');
                       // Restart the app
                       main();
