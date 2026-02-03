@@ -102,11 +102,45 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         isRegistered: true,
       );
 
-      // Save user profile
+      // Save user profile (to both Hive and Firestore)
+      print('🔄 Saving user to Hive: ${appUser.uid} (isRegistered: ${appUser.isRegistered})');
       await userService.saveUser(appUser);
+      print('✅ User registration saved: ${appUser.uid} (isRegistered: ${appUser.isRegistered})');
+
+      // Verify the user was saved correctly
+      final verifyUser = await userService.getUser(firebaseUser.uid);
+      if (verifyUser != null) {
+        print('✅ Verification: User found in Hive after save');
+        print('   - UID: ${verifyUser.uid}');
+        print('   - isRegistered: ${verifyUser.isRegistered}');
+        print('   - fullName: ${verifyUser.fullName}');
+        if (!verifyUser.isRegistered) {
+          print('❌ CRITICAL: User saved but isRegistered is FALSE!');
+          print('   Attempting to save again with explicit isRegistered: true');
+          final correctedUser = verifyUser.copyWith(isRegistered: true);
+          await userService.saveUser(correctedUser);
+          // Verify again
+          final reVerifyUser = await userService.getUser(firebaseUser.uid);
+          if (reVerifyUser != null && reVerifyUser.isRegistered) {
+            print('✅ User corrected: isRegistered is now TRUE');
+          } else {
+            print('❌ ERROR: Failed to correct isRegistered flag');
+          }
+        }
+      } else {
+        print('❌ CRITICAL: User not found in Hive after save!');
+      }
 
       // Update Firebase user display name
-      await firebaseUser.updateDisplayName(_nameController.text.trim());
+      try {
+        await firebaseUser.updateDisplayName(_nameController.text.trim());
+      } catch (e) {
+        print('⚠️ Failed to update display name: $e');
+        // Continue anyway - not critical
+      }
+
+      // Wait a moment to ensure data is saved and synced
+      await Future.delayed(const Duration(milliseconds: 500));
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

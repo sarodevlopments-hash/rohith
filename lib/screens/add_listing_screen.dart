@@ -25,6 +25,8 @@ import '../models/seller_profile.dart';
 import 'seller_item_management_screen.dart';
 import '../services/listing_validator.dart';
 import '../services/seller_profile_service.dart';
+import '../services/listing_firestore_service.dart';
+import '../services/image_storage_service.dart';
 import 'package:hive/hive.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -1769,11 +1771,119 @@ class _AddListingScreenState extends State<AddListingScreen> {
         final bool wasScheduling = enableScheduling;
         final currentSellerId = sellerId;
 
+        // ✅ Upload images to Firebase Storage before creating listing
+        String? uploadedImageUrl;
+        Map<String, String> uploadedColorImageUrls = {};
+
+        if (currentSellerId != null) {
+          // Generate temporary listing ID for image organization
+          final tempListingId = DateTime.now().millisecondsSinceEpoch.toString();
+
+          // Upload main product image
+          if (productImagePath != null && ImageStorageService.isLocalPath(productImagePath)) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Uploading image...'),
+                  duration: Duration(seconds: 1),
+                ),
+              );
+            }
+            
+            uploadedImageUrl = await ImageStorageService.uploadImage(
+              localPath: productImagePath!,
+              imageBytes: kIsWeb ? productImageBytes : null,
+              sellerId: currentSellerId,
+              listingId: tempListingId,
+            );
+
+            if (uploadedImageUrl == null) {
+              setState(() => isSubmitting = false);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Failed to upload image. Please try again.'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+              return;
+            }
+          } else if (productImagePath != null && ImageStorageService.isStorageUrl(productImagePath)) {
+            // Already a Storage URL (editing existing listing)
+            uploadedImageUrl = productImagePath;
+          }
+
+          // Upload color images for clothing
+          if (selectedType == SellType.clothingAndApparel && colorImagePaths.isNotEmpty) {
+            final localColorPaths = <String, String>{};
+            final colorBytes = <String, Uint8List>{};
+            
+            for (final entry in colorImagePaths.entries) {
+              if (ImageStorageService.isLocalPath(entry.value)) {
+                localColorPaths[entry.key] = entry.value;
+                if (kIsWeb && colorImageBytes.containsKey(entry.key)) {
+                  colorBytes[entry.key] = colorImageBytes[entry.key]!;
+                }
+              } else if (ImageStorageService.isStorageUrl(entry.value)) {
+                // Already a Storage URL
+                uploadedColorImageUrls[entry.key] = entry.value;
+              }
+            }
+
+            if (localColorPaths.isNotEmpty) {
+              uploadedColorImageUrls.addAll(
+                await ImageStorageService.uploadColorImages(
+                  colorImagePaths: localColorPaths,
+                  colorImageBytes: colorBytes.isEmpty ? null : colorBytes,
+                  sellerId: currentSellerId,
+                  listingId: tempListingId,
+                ),
+              );
+            }
+          }
+        }
+
+        // Create listing with Storage URLs instead of local paths
+        final listingWithStorageUrls = Listing(
+          name: listing.name,
+          sellerName: listing.sellerName,
+          price: listing.price,
+          originalPrice: listing.originalPrice,
+          quantity: listing.quantity,
+          initialQuantity: listing.initialQuantity,
+          sellerId: listing.sellerId,
+          type: listing.type,
+          fssaiLicense: listing.fssaiLicense,
+          preparedAt: listing.preparedAt,
+          expiryDate: listing.expiryDate,
+          category: listing.category,
+          cookedFoodSource: listing.cookedFoodSource,
+          imagePath: uploadedImageUrl ?? listing.imagePath, // Use Storage URL
+          measurementUnit: listing.measurementUnit,
+          packSizes: listing.packSizes,
+          isBulkFood: listing.isBulkFood,
+          servesCount: listing.servesCount,
+          portionDescription: listing.portionDescription,
+          isKitchenOpen: listing.isKitchenOpen,
+          preparationTimeMinutes: listing.preparationTimeMinutes,
+          maxCapacity: listing.maxCapacity,
+          currentOrders: listing.currentOrders,
+          clothingCategory: listing.clothingCategory,
+          description: listing.description,
+          availableSizes: listing.availableSizes,
+          availableColors: listing.availableColors,
+          sizeColorCombinations: listing.sizeColorCombinations,
+          colorImages: uploadedColorImageUrls.isNotEmpty 
+              ? uploadedColorImageUrls 
+              : listing.colorImages, // Use Storage URLs
+        );
+
         if (wasScheduling && currentSellerId != null) {
           // Create a scheduled listing for this single item
           final scheduledListing = ScheduledListing(
             scheduledId: DateTime.now().millisecondsSinceEpoch.toString(),
-            listingData: listing,
+            listingData: listingWithStorageUrls,
             scheduleType: selectedScheduleType!,
             scheduleStartDate: scheduleStartDate!,
             scheduleEndDate: scheduleEndDate,
@@ -1787,7 +1897,13 @@ class _AddListingScreenState extends State<AddListingScreen> {
           await ScheduledListingService.addScheduledListing(scheduledListing);
         } else {
           // Post immediately
-          await box.add(listing);
+          await box.add(listingWithStorageUrls);
+          // ✅ Sync to Firestore for cloud persistence (non-blocking)
+          // Don't await - let it run in background so it doesn't block UI
+          ListingFirestoreService.upsertListing(listingWithStorageUrls).catchError((e) {
+            print('⚠️ Firestore sync failed (listing saved locally): $e');
+            // Don't show error to user - listing is already saved locally
+          });
         }
 
         setState(() {
@@ -4421,13 +4537,81 @@ class _AddListingScreenState extends State<AddListingScreen> {
           await ScheduledListingService.addScheduledListing(scheduledListing);
         }
       } else {
-        // Post immediately
+        // Post immediately - upload images first
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Uploading images...'),
+              duration: Duration(seconds: 1),
+            ),
+          );
+        }
+
         for (final pendingItem in pendingItems) {
+          // Upload image if it's a local path
+          String? uploadedImageUrl = pendingItem.imagePath;
+
+          if (pendingItem.imagePath != null && ImageStorageService.isLocalPath(pendingItem.imagePath)) {
+            final tempListingId = DateTime.now().millisecondsSinceEpoch.toString();
+            uploadedImageUrl = await ImageStorageService.uploadImage(
+              localPath: pendingItem.imagePath!,
+              imageBytes: null, // Pending items don't store bytes
+              sellerId: currentSellerId,
+              listingId: tempListingId,
+            );
+
+            if (uploadedImageUrl == null) {
+              print('⚠️ Failed to upload image for listing: ${pendingItem.name}');
+              // Continue with local path as fallback
+              uploadedImageUrl = pendingItem.imagePath;
+            }
+          }
+
           final listing = pendingItem.toListing(
             sellerId: currentSellerId,
             sellerName: sellerName,
           );
-          await box.add(listing);
+
+          // Update listing with Storage URL if uploaded
+          final listingWithStorageUrl = Listing(
+            name: listing.name,
+            sellerName: listing.sellerName,
+            price: listing.price,
+            originalPrice: listing.originalPrice,
+            quantity: listing.quantity,
+            initialQuantity: listing.initialQuantity,
+            sellerId: listing.sellerId,
+            type: listing.type,
+            fssaiLicense: listing.fssaiLicense,
+            preparedAt: listing.preparedAt,
+            expiryDate: listing.expiryDate,
+            category: listing.category,
+            cookedFoodSource: listing.cookedFoodSource,
+            imagePath: uploadedImageUrl ?? listing.imagePath,
+            measurementUnit: listing.measurementUnit,
+            packSizes: listing.packSizes,
+            isBulkFood: listing.isBulkFood,
+            servesCount: listing.servesCount,
+            portionDescription: listing.portionDescription,
+            isKitchenOpen: listing.isKitchenOpen,
+            preparationTimeMinutes: listing.preparationTimeMinutes,
+            maxCapacity: listing.maxCapacity,
+            currentOrders: listing.currentOrders,
+            clothingCategory: listing.clothingCategory,
+            description: listing.description,
+            availableSizes: listing.availableSizes,
+            availableColors: listing.availableColors,
+            sizeColorCombinations: listing.sizeColorCombinations,
+            colorImages: listing.colorImages,
+          );
+
+          await box.add(listingWithStorageUrl);
+          // ✅ Sync to Firestore for cloud persistence (non-blocking)
+          // Don't await - let it run in background so it doesn't block UI
+          ListingFirestoreService.upsertListing(listingWithStorageUrl).catchError((e) {
+            print('⚠️ Firestore sync failed (listing saved locally): $e');
+            // Don't show error to user - listing is already saved locally
+          });
         }
 
         // Success message will be shown after navigation delay

@@ -24,6 +24,7 @@
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 import '../models/listing.dart';
+import 'listing_firestore_service.dart';
 
 class ApiService {
   static Future<String?> createListing(
@@ -31,14 +32,20 @@ class ApiService {
     Listing listing,
   ) async {
     try {
-      // ✅ Open Hive box
+      // ✅ Save to Hive (local storage)
       final box = Hive.box<Listing>('listingBox');
-
-      // ✅ Save listing
       await box.add(listing);
 
-      debugPrint("Listing saved to Hive");
-      debugPrint(listing.toString());
+      debugPrint("✅ Listing saved to Hive");
+
+      // ✅ Sync to Firestore (cloud storage) - non-blocking
+      // This ensures data persists even if app is uninstalled
+      ListingFirestoreService.upsertListing(listing).catchError((e) {
+        debugPrint("⚠️ Firestore sync failed (but listing saved locally): $e");
+        // Don't fail the operation if Firestore is unavailable
+      });
+
+      debugPrint("Listing: ${listing.toString()}");
 
       return null; // ✅ success
     } catch (e) {

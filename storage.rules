@@ -1,0 +1,17 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Product images: sellers can upload/delete their own images
+    match /{sellerId}/listings/{listingId}/{allPaths=**} {
+      allow read: if request.auth != null; // Anyone authenticated can read
+      allow write: if request.auth != null && request.auth.uid == sellerId; // Only seller can write
+      allow delete: if request.auth != null && request.auth.uid == sellerId; // Only seller can delete
+    }
+    
+    // Default: deny all other access
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
