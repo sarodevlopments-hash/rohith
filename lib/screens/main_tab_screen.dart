@@ -183,15 +183,8 @@ class _MainTabScreenState extends State<MainTabScreen> {
       }
     };
     _ordersListenable.addListener(_ordersListener!);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final userId = FirebaseAuth.instance.currentUser?.uid;
-      if (userId != null && mounted) {
-        // Always check for seller notifications (new orders) regardless of tab
-        NotificationService.checkForNewOrders(context, userId);
-        // Also check for buyer notifications (accepted orders) - use persistent notification
-        AcceptedOrderNotificationService.checkForAcceptedOrders(context);
-      }
-    });
+    // Trigger a single initial check after first frame; subsequent checks come from the Hive listener.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _ordersListener?.call());
   }
 
   @override

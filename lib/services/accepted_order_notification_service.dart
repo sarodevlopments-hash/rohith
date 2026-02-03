@@ -17,10 +17,11 @@ class AcceptedOrderNotificationService {
   }
 
   static void dismissNotification(String orderId) {
+    // orderId should be the raw Order.orderId (without "accepted_" prefix)
     final notificationKey = 'accepted_$orderId';
     _dismissedNotifications.add(notificationKey);
-    // Also mark as shown so it won't show again
-    _shownNotifications.remove(notificationKey);
+    // Ensure it's treated as shown so it won't show again
+    _shownNotifications.add(notificationKey);
     // Hide notification (with a small delay to allow animation to complete)
     Future.delayed(const Duration(milliseconds: 350), () {
       _hideNotification();
@@ -168,7 +169,8 @@ class AcceptedOrderNotificationService {
             sellerPhone: sellerPhone,
             pickupLocation: pickupLocation,
             onDismiss: () {
-              dismissNotification(notificationKey);
+              // Pass the raw orderId so dismissNotification builds the correct key.
+              dismissNotification(order.orderId);
             },
           ),
         ),
