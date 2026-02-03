@@ -1,0 +1,45 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Listings Collection
+    // - Anyone authenticated can read listings (for buyers to browse)
+    // - Only the seller who created it can write/update/delete
+    match /listings/{listingId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && 
+        request.resource.data.sellerId == request.auth.uid;
+      allow update, delete: if request.auth != null && 
+        resource.data.sellerId == request.auth.uid;
+    }
+    
+    // Orders Collection
+    // - Users can read their own orders (as buyer or seller)
+    // - Users can create orders where they are the buyer
+    // - Sellers can update orders where they are the seller
+    match /orders/{orderId} {
+      allow read: if request.auth != null && 
+        (resource.data.userId == request.auth.uid || 
+         resource.data.sellerId == request.auth.uid);
+      allow create: if request.auth != null && 
+        request.resource.data.userId == request.auth.uid;
+      allow update: if request.auth != null && 
+        (resource.data.userId == request.auth.uid || 
+         resource.data.sellerId == request.auth.uid);
+      allow delete: if request.auth != null && 
+        resource.data.userId == request.auth.uid;
+    }
+    
+    // User Profiles Collection
+    // - Users can read/write their own profile
+    match /userProfiles/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Default: deny all other access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+

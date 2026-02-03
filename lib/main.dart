@@ -86,17 +86,19 @@ void main() async {
   Hive.registerAdapter(ScheduleTypeAdapter());
   Hive.registerAdapter(ScheduledListingAdapter());
 
-    // ✅ Open boxes (ONLY ONCE)
+    // ✅ Open boxes (ONLY ONCE) - All boxes must be opened here for persistence
     await Hive.openBox<Listing>('listingBox');
     await Hive.openBox<FoodItem>('foodBox');
-  await Hive.openBox<Order>('ordersBox');
-  await Hive.openBox<int>('savedBox');
-  await Hive.openBox('userBox');
-  await Hive.openBox('sellerProfileBox');
-  await Hive.openBox('ratingsBox');
+    await Hive.openBox<Order>('ordersBox');
+    await Hive.openBox<int>('savedBox');
+    await Hive.openBox('userBox');
+    await Hive.openBox('sellerProfileBox');
+    await Hive.openBox('ratingsBox');
     await Hive.openBox<AppUser>('usersBox');
     await Hive.openBox('cartBox');
     await Hive.openBox<ScheduledListing>('scheduledListingsBox');
+    // ✅ Initialize recently viewed box for persistence
+    await Hive.openBox<String>('recentlyViewedBox');
 
     // ✅ Init local notifications (foreground/heads-up)
     await NotificationService.init();
@@ -156,6 +158,9 @@ void main() async {
                       await Hive.deleteBoxFromDisk('sellerProfileBox');
                       await Hive.deleteBoxFromDisk('ratingsBox');
                       await Hive.deleteBoxFromDisk('usersBox');
+                      await Hive.deleteBoxFromDisk('cartBox');
+                      await Hive.deleteBoxFromDisk('scheduledListingsBox');
+                      await Hive.deleteBoxFromDisk('recentlyViewedBox');
                       // Restart the app
                       main();
                     } catch (deleteError) {

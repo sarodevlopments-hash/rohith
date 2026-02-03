@@ -1,11 +1,10 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:image_picker/image_picker.dart';
 import '../models/listing.dart';
 import '../screens/product_details_screen.dart';
 import '../theme/app_theme.dart';
+import '../services/image_storage_service.dart';
 
 class CompactProductCard extends StatelessWidget {
   final Listing listing;
@@ -16,16 +15,6 @@ class CompactProductCard extends StatelessWidget {
     required this.listing,
     this.badgeText,
   });
-
-  Future<Uint8List> _loadImageBytes(String imagePath) async {
-    if (kIsWeb) {
-      final XFile file = XFile(imagePath);
-      return await file.readAsBytes();
-    } else {
-      final File file = File(imagePath);
-      return await file.readAsBytes();
-    }
-  }
 
   double _calculateDiscount() {
     if (listing.originalPrice == null) return 0;
@@ -64,31 +53,45 @@ class CompactProductCard extends StatelessWidget {
                     height: 140,
                     width: double.infinity,
                     color: Colors.grey.shade200,
-                    child: imagePath != null
-                        ? (kIsWeb
-                            ? FutureBuilder<Uint8List>(
-                                future: _loadImageBytes(imagePath),
-                                builder: (context, snapshot) {
-                                  if (snapshot.hasData) {
-                                    return Image.memory(
-                                      snapshot.data!,
+                  child: imagePath != null
+                      ? (ImageStorageService.isStorageUrl(imagePath)
+                          // Firebase Storage URL - display directly
+                          ? Image.network(
+                              imagePath,
+                              fit: BoxFit.cover,
+                              loadingBuilder: (context, child, loadingProgress) {
+                                if (loadingProgress == null) return child;
+                                return Center(
+                                  child: CircularProgressIndicator(
+                                    value: loadingProgress.expectedTotalBytes != null
+                                        ? loadingProgress.cumulativeBytesLoaded /
+                                            loadingProgress.expectedTotalBytes!
+                                        : null,
+                                  ),
+                                );
+                              },
+                              errorBuilder: (context, error, stackTrace) {
+                                return const Center(
+                                  child: Icon(Icons.image_not_supported, size: 40),
+                                );
+                              },
+                            )
+                          // Local file path - only load on mobile, show placeholder on web
+                          : (kIsWeb
+                              ? const Center(
+                                  child: Icon(Icons.image_not_supported, size: 40),
+                                )
+                              : File(imagePath).existsSync()
+                                  ? Image.file(
+                                      File(imagePath),
                                       fit: BoxFit.cover,
-                                    );
-                                  }
-                                  return const Center(child: CircularProgressIndicator());
-                                },
-                              )
-                            : File(imagePath).existsSync()
-                                ? Image.file(
-                                    File(imagePath),
-                                    fit: BoxFit.cover,
-                                  )
-                                : const Center(
-                                    child: Icon(Icons.image_not_supported, size: 40),
-                                  ))
-                        : const Center(
-                            child: Icon(Icons.fastfood, size: 40, color: Colors.grey),
-                          ),
+                                    )
+                                  : const Center(
+                                      child: Icon(Icons.image_not_supported, size: 40),
+                                    )))
+                      : const Center(
+                          child: Icon(Icons.fastfood, size: 40, color: Colors.grey),
+                        ),
                   ),
                   // Badge (Top Left)
                   if (badgeText != null)

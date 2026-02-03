@@ -1,10 +1,8 @@
 import 'dart:io';
 import 'dart:async';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:ui';
-import 'package:image_picker/image_picker.dart';
 import 'package:hive/hive.dart';
 import '../models/listing.dart';
 import '../models/food_category.dart';
@@ -12,6 +10,7 @@ import '../models/sell_type.dart';
 import '../models/rating.dart';
 import '../screens/product_details_screen.dart';
 import '../theme/app_theme.dart';
+import '../services/image_storage_service.dart';
 
 class BuyerListingCard extends StatefulWidget {
   final Listing listing;
@@ -68,16 +67,6 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
             widget.listing.originalPrice!) * 100;
   }
 
-  Future<Uint8List> _loadImageBytes(String imagePath) async {
-    if (kIsWeb) {
-      final XFile file = XFile(imagePath);
-      return await file.readAsBytes();
-    } else {
-      final File file = File(imagePath);
-      return await file.readAsBytes();
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final isAvailable = widget.listing.isLiveKitchen 
@@ -111,27 +100,41 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
                   width: double.infinity,
                   color: Colors.grey.shade200,
                   child: imagePath != null
-                      ? (kIsWeb
-                          ? FutureBuilder<Uint8List>(
-                              future: _loadImageBytes(imagePath),
-                              builder: (context, snapshot) {
-                                if (snapshot.hasData) {
-                                  return Image.memory(
-                                    snapshot.data!,
-                                    fit: BoxFit.cover,
-                                  );
-                                }
-                                return const Center(child: CircularProgressIndicator());
+                      ? (ImageStorageService.isStorageUrl(imagePath)
+                          // Firebase Storage URL - display directly
+                          ? Image.network(
+                              imagePath,
+                              fit: BoxFit.cover,
+                              loadingBuilder: (context, child, loadingProgress) {
+                                if (loadingProgress == null) return child;
+                                return Center(
+                                  child: CircularProgressIndicator(
+                                    value: loadingProgress.expectedTotalBytes != null
+                                        ? loadingProgress.cumulativeBytesLoaded /
+                                            loadingProgress.expectedTotalBytes!
+                                        : null,
+                                  ),
+                                );
+                              },
+                              errorBuilder: (context, error, stackTrace) {
+                                return const Center(
+                                  child: Icon(Icons.image_not_supported, size: 64),
+                                );
                               },
                             )
-                          : File(imagePath).existsSync()
-                              ? Image.file(
-                                  File(imagePath),
-                                  fit: BoxFit.cover,
-                                )
-                              : const Center(
+                          // Local file path - only load on mobile, show placeholder on web
+                          : (kIsWeb
+                              ? const Center(
                                   child: Icon(Icons.image_not_supported, size: 64),
-                                ))
+                                )
+                              : File(imagePath).existsSync()
+                                  ? Image.file(
+                                      File(imagePath),
+                                      fit: BoxFit.cover,
+                                    )
+                                  : const Center(
+                                      child: Icon(Icons.image_not_supported, size: 64),
+                                    )))
                       : const Center(
                           child: Icon(Icons.fastfood, size: 64, color: Colors.grey),
                         ),

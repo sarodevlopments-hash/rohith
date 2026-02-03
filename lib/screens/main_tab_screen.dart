@@ -6,6 +6,8 @@ import '../models/order.dart';
 import '../services/notification_service.dart';
 import '../services/order_sync_service.dart';
 import '../services/accepted_order_notification_service.dart';
+import '../services/listing_firestore_service.dart';
+import '../services/firestore_verification_service.dart';
 import 'buyer_category_home_screen.dart';
 import 'cart_screen.dart';
 import 'buyer_orders_screen.dart';
@@ -153,6 +155,21 @@ class _MainTabScreenState extends State<MainTabScreen> {
     // Start Firestore -> Hive sync for orders so buyer/seller status updates work in real time.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       OrderSyncService.start();
+      
+      // ✅ Verify Firestore database is accessible (diagnostic)
+      Future.delayed(const Duration(milliseconds: 500), () {
+        FirestoreVerificationService.printVerificationReport();
+      });
+      
+      // ✅ Sync listings from Firestore on app start (after user is authenticated)
+      // This restores listings that were saved to cloud, ensuring data persistence
+      // Run in background without blocking UI
+      Future.delayed(const Duration(milliseconds: 1000), () {
+        ListingFirestoreService.syncListingsFromFirestore().catchError((e) {
+          print('⚠️ Firestore listing sync failed (app will continue with local data): $e');
+          // Don't block app if Firestore is unavailable - local Hive data will be used
+        });
+      });
     });
     _ordersListenable = Hive.box<Order>('ordersBox').listenable();
     _ordersListener = () {

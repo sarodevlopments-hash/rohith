@@ -1,0 +1,146 @@
+import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+
+/// Service to verify Firestore database is created and accessible
+class FirestoreVerificationService {
+  // Use the correct database ID: 'reqfood' (not the default)
+  static FirebaseFirestore get _db => FirebaseFirestore.instanceFor(
+    app: Firebase.app(),
+    databaseId: 'reqfood',
+  );
+
+  /// Verify Firestore database is accessible
+  static Future<Map<String, dynamic>> verifyDatabase() async {
+    final result = <String, dynamic>{
+      'databaseExists': false,
+      'isAccessible': false,
+      'authentication': false,
+      'rulesPublished': false,
+      'error': null,
+      'details': <String, dynamic>{},
+    };
+
+    try {
+      // Check 1: Authentication
+      final auth = FirebaseAuth.instance;
+      final currentUser = auth.currentUser;
+      result['authentication'] = currentUser != null;
+      result['details']['userId'] = currentUser?.uid;
+      result['details']['userEmail'] = currentUser?.email;
+
+      if (currentUser == null) {
+        result['error'] = 'User not authenticated';
+        return result;
+      }
+
+      print('✅ User authenticated: ${currentUser.uid}');
+
+      // Check 2: Try to read from a test collection
+      try {
+        print('🔍 Testing Firestore connection...');
+        await _db
+            .collection('_verification_test')
+            .doc('connection_test')
+            .get()
+            .timeout(const Duration(seconds: 10));
+
+        result['databaseExists'] = true;
+        result['isAccessible'] = true;
+        print('✅ Firestore database is accessible');
+
+        // Check 3: Try to write (test rules)
+        try {
+          await _db
+              .collection('_verification_test')
+              .doc('write_test')
+              .set({
+                'test': true,
+                'timestamp': FieldValue.serverTimestamp(),
+              })
+              .timeout(const Duration(seconds: 10));
+
+          result['rulesPublished'] = true;
+          print('✅ Rules are published and working');
+
+          // Clean up test document
+          await _db
+              .collection('_verification_test')
+              .doc('write_test')
+              .delete()
+              .timeout(const Duration(seconds: 5));
+        } catch (e) {
+          result['rulesPublished'] = false;
+          result['error'] = 'Write test failed: $e';
+          print('❌ Write test failed: $e');
+          if (e.toString().contains('permission') || e.toString().contains('Missing')) {
+            result['details']['rulesIssue'] = 'Rules are blocking writes - may not be published';
+          }
+        }
+      } on TimeoutException {
+        result['error'] = 'Connection timeout - database may not be accessible';
+        result['details']['timeout'] = true;
+        print('⏱️ Firestore connection timeout');
+      } catch (e) {
+        result['error'] = 'Connection failed: $e';
+        print('❌ Firestore connection failed: $e');
+        if (e.toString().contains('unavailable') || e.toString().contains('offline')) {
+          result['details']['offline'] = true;
+          result['details']['possibleCause'] = 'Rules not published or network issue';
+        }
+      }
+    } catch (e) {
+      result['error'] = 'Verification failed: $e';
+      print('❌ Verification failed: $e');
+    }
+
+    return result;
+  }
+
+  /// Print verification results
+  static Future<void> printVerificationReport() async {
+    print('');
+    print('═══════════════════════════════════════════════════════');
+    print('🔍 FIRESTORE DATABASE VERIFICATION');
+    print('═══════════════════════════════════════════════════════');
+    
+    final result = await verifyDatabase();
+    
+    print('Authentication: ${result['authentication'] ? "✅" : "❌"}');
+    if (result['authentication']) {
+      print('  User ID: ${result['details']['userId']}');
+      print('  Email: ${result['details']['userEmail']}');
+    }
+    
+    print('Database Exists: ${result['databaseExists'] ? "✅" : "❌"}');
+    print('Database Accessible: ${result['isAccessible'] ? "✅" : "❌"}');
+    print('Rules Published: ${result['rulesPublished'] ? "✅" : "❌"}');
+    
+    if (result['error'] != null) {
+      print('Error: ${result['error']}');
+    }
+    
+    if (result['details']['rulesIssue'] != null) {
+      print('⚠️ ${result['details']['rulesIssue']}');
+    }
+    
+    print('═══════════════════════════════════════════════════════');
+    print('');
+    
+    // Provide recommendations
+    if (!result['authentication']) {
+      print('💡 Fix: Log in to your app first');
+    } else if (!result['databaseExists']) {
+      print('💡 Fix: Go to Firebase Console → Firestore → Create database');
+    } else if (!result['isAccessible']) {
+      print('💡 Fix: Check network connection and Firestore status');
+    } else if (!result['rulesPublished']) {
+      print('💡 Fix: Publish security rules in Firebase Console');
+    } else {
+      print('✅ Everything is working! Firestore is ready to use.');
+    }
+    print('');
+  }
+}
+

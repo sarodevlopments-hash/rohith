@@ -1,0 +1,28 @@
+═══════════════════════════════════════════════════════
+TEMPORARY TEST MODE RULES (For Testing Only!)
+═══════════════════════════════════════════════════════
+
+⚠️ WARNING: These rules are LESS SECURE. Use only for testing!
+
+If your app works with these rules, the issue is with your main rules syntax.
+
+Copy this to Firebase Console → Firestore → Rules:
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
+
+Steps:
+1. Paste above rules in Firebase Console
+2. Click "Publish"
+3. Wait for "Rules published successfully"
+4. Restart your app
+5. Test - if it works, switch back to proper rules from firestore.rules
+
+═══════════════════════════════════════════════════════
+

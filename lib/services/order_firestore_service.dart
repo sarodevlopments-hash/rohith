@@ -1,8 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart' hide Order;
+import 'package:firebase_core/firebase_core.dart';
 import '../models/order.dart';
 
 class OrderFirestoreService {
-  static final FirebaseFirestore _db = FirebaseFirestore.instance;
+  // Use the correct database ID: 'reqfood' (not the default)
+  static FirebaseFirestore get _db => FirebaseFirestore.instanceFor(
+    app: Firebase.app(),
+    databaseId: 'reqfood',
+  );
 
   static DocumentReference<Map<String, dynamic>> doc(String orderId) {
     return _db.collection('orders').doc(orderId);
