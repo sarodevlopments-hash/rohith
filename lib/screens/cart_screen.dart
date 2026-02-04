@@ -13,6 +13,12 @@ import 'cart_payment_screen.dart';
 class CartScreen extends StatelessWidget {
   const CartScreen({super.key});
 
+  static void _navigateToHome(BuildContext context) {
+    // Pop until we reach the main tab screen (home)
+    // This will take us back to the MainTabScreen which shows the home tab
+    Navigator.of(context).popUntil((route) => route.isFirst);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -28,6 +34,10 @@ class CartScreen extends StatelessWidget {
           ),
         ),
         iconTheme: const IconThemeData(color: Colors.black87),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.black87),
+          onPressed: () => _navigateToHome(context),
+        ),
       ),
       body: const CartScreenContent(),
     );
@@ -680,7 +690,7 @@ class _CartScreenContentState extends State<CartScreenContent> {
             ),
             const SizedBox(height: 32),
             ElevatedButton.icon(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => CartScreen._navigateToHome(context),
               icon: const Icon(Icons.store),
               label: const Text('Browse Items'),
               style: ElevatedButton.styleFrom(
