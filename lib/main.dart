@@ -21,6 +21,7 @@ import 'models/schedule_type.dart';
 import 'models/scheduled_listing.dart';
 import 'models/rating.dart';
 import 'models/app_user.dart';
+import 'models/buyer_address.dart';
 import 'auth/auth_gate.dart';
 // void main() async {
 //   WidgetsFlutterBinding.ensureInitialized();
@@ -78,6 +79,7 @@ void main() async {
   Hive.registerAdapter(MeasurementUnitAdapter());
   Hive.registerAdapter(RatingAdapter());
   Hive.registerAdapter(AppUserAdapter());
+  Hive.registerAdapter(BuyerAddressAdapter());
 
   Hive.registerAdapter(FoodItemAdapter());
   Hive.registerAdapter(OrderAdapter());
