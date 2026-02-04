@@ -12,6 +12,7 @@ import '../services/recently_viewed_service.dart';
 import '../services/recommendation_service.dart';
 import '../services/location_based_service.dart';
 import '../services/time_based_suggestions_service.dart';
+import '../services/distance_filter_service.dart';
 import '../config/home_features_config.dart';
 import 'category_listing_screen.dart';
 
@@ -110,7 +111,7 @@ class _BuyerCategoryHomeScreenState extends State<BuyerCategoryHomeScreen> {
 
   Future<void> _loadMostBoughtItems() async {
     final listingBox = Hive.box<Listing>('listingBox');
-    final mostBoughtIds = MostBoughtService.getPopularListingIds(limit: 10);
+    final mostBoughtIds = MostBoughtService.getPopularListingIds(limit: 20); // Get more to account for distance filtering
     
     final listings = mostBoughtIds
         .map((id) {
@@ -124,12 +125,24 @@ class _BuyerCategoryHomeScreenState extends State<BuyerCategoryHomeScreen> {
         })
         .whereType<Listing>()
         .where((l) => l.quantity > 0 || (l.isLiveKitchen && l.isLiveKitchenAvailable))
+        .toList();
+
+    // Apply distance filtering to most bought items
+    final filteredWithDistance = await DistanceFilterService.filterByDistance(
+      listings,
+      expandRadiusIfEmpty: true,
+      includeWithoutLocation: false,
+    );
+
+    // Take only the filtered listings within distance limit
+    final filteredListings = filteredWithDistance
+        .map((lwd) => lwd.listing)
         .take(10)
         .toList();
 
     if (mounted) {
       setState(() {
-        _mostBoughtListings = listings;
+        _mostBoughtListings = filteredListings;
       });
     }
   }
@@ -166,7 +179,7 @@ class _BuyerCategoryHomeScreenState extends State<BuyerCategoryHomeScreen> {
       
       final listingBox = Hive.box<Listing>('listingBox');
       final recommendedIds = await RecommendationService.getRecommendedListingIds(
-        limit: HomeFeaturesConfig.recommendationsLimit,
+        limit: HomeFeaturesConfig.recommendationsLimit * 2, // Get more to account for distance filtering
       );
       
       if (recommendedIds.isEmpty) {
@@ -190,12 +203,24 @@ class _BuyerCategoryHomeScreenState extends State<BuyerCategoryHomeScreen> {
           })
           .whereType<Listing>()
           .where((l) => l.quantity > 0 || (l.isLiveKitchen && l.isLiveKitchenAvailable))
+          .toList();
+
+      // Apply distance filtering to recommended items
+      final filteredWithDistance = await DistanceFilterService.filterByDistance(
+        listings,
+        expandRadiusIfEmpty: true,
+        includeWithoutLocation: false,
+      );
+
+      // Take only the filtered listings within distance limit
+      final filteredListings = filteredWithDistance
+          .map((lwd) => lwd.listing)
           .take(HomeFeaturesConfig.recommendationsLimit)
           .toList();
 
       if (mounted) {
         setState(() {
-          _recommendedListings = listings;
+          _recommendedListings = filteredListings;
         });
       }
     } catch (e) {
@@ -211,7 +236,7 @@ class _BuyerCategoryHomeScreenState extends State<BuyerCategoryHomeScreen> {
   Future<void> _loadLocationBasedItems() async {
     final listingBox = Hive.box<Listing>('listingBox');
     final locationBasedIds = LocationBasedService.getPopularNearYouListingIds(
-      limit: HomeFeaturesConfig.locationBasedLimit,
+      limit: HomeFeaturesConfig.locationBasedLimit * 2, // Get more to account for distance filtering
     );
     
     // Get user location
@@ -229,12 +254,24 @@ class _BuyerCategoryHomeScreenState extends State<BuyerCategoryHomeScreen> {
         })
         .whereType<Listing>()
         .where((l) => l.quantity > 0 || (l.isLiveKitchen && l.isLiveKitchenAvailable))
+        .toList();
+
+    // Apply distance filtering to "Popular Near You" items
+    final filteredWithDistance = await DistanceFilterService.filterByDistance(
+      listings,
+      expandRadiusIfEmpty: true,
+      includeWithoutLocation: false,
+    );
+
+    // Take only the filtered listings within distance limit
+    final filteredListings = filteredWithDistance
+        .map((lwd) => lwd.listing)
         .take(HomeFeaturesConfig.locationBasedLimit)
         .toList();
 
     if (mounted) {
       setState(() {
-        _locationBasedListings = listings;
+        _locationBasedListings = filteredListings;
       });
     }
   }

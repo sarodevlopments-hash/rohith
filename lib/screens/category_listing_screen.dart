@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/listing.dart';
 import '../models/sell_type.dart';
 import '../models/food_category.dart';
 import '../widgets/buyer_listing_card.dart';
+import '../services/distance_filter_service.dart';
 import '../theme/app_theme.dart';
 
 class CategoryListingScreen extends StatefulWidget {
@@ -29,6 +31,7 @@ class _CategoryListingScreenState extends State<CategoryListingScreen> {
   bool _showOnlyAvailable = true;
   bool _sortByDiscount = false;
   String _sortOrder = 'default'; // 'default', 'price_low', 'price_high', 'discount'
+  bool _useLocationFilter = true; // Enable location-based filtering by default
 
   @override
   void dispose() {
@@ -118,6 +121,57 @@ class _CategoryListingScreenState extends State<CategoryListingScreen> {
     }
     
     return sorted;
+  }
+
+  Widget _buildListingList(
+    List<Listing> listings,
+    List<ListingWithDistance>? listingsWithDistance,
+  ) {
+    // Create a map for quick lookup
+    final distanceMap = <String, ListingWithDistance>{};
+    if (listingsWithDistance != null) {
+      for (final lwd in listingsWithDistance) {
+        distanceMap[lwd.listing.key.toString()] = lwd;
+      }
+    }
+
+    if (listings.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.search_off,
+              size: 64,
+              color: Colors.grey.shade400,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              _searchQuery.isNotEmpty || _selectedCategory != null
+                  ? "No items found"
+                  : "No ${widget.categoryTitle.toLowerCase()} available right now",
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey.shade600,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: listings.length,
+      itemBuilder: (context, index) {
+        final listing = listings[index];
+        final listingWithDistance = distanceMap[listing.key.toString()];
+        return BuyerListingCard(
+          listing: listing,
+          listingWithDistance: listingWithDistance,
+        );
+      },
+    );
   }
 
   void _showFiltersDialog() {
@@ -425,40 +479,65 @@ class _CategoryListingScreenState extends State<CategoryListingScreen> {
                 final filteredListings = _filterListings(allListings);
                 final sortedListings = _sortListings(filteredListings);
 
-                if (sortedListings.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.search_off,
-                          size: 64,
-                          color: Colors.grey.shade400,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          _searchQuery.isNotEmpty || _selectedCategory != null
-                              ? "No items found"
-                              : "No ${widget.categoryTitle.toLowerCase()} available right now",
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey.shade600,
+                // Apply distance filtering if enabled
+                if (_useLocationFilter && sortedListings.isNotEmpty) {
+                  return FutureBuilder<List<ListingWithDistance>>(
+                    future: DistanceFilterService.filterByDistance(sortedListings),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(
+                          child: CircularProgressIndicator(),
+                        );
+                      }
+
+                      if (snapshot.hasError) {
+                        debugPrint('[CategoryListingScreen] Distance filter error: ${snapshot.error}');
+                        // Fallback to showing all listings without distance
+                        return _buildListingList(sortedListings, null);
+                      }
+
+                      final listingsWithDistance = snapshot.data ?? [];
+                      
+                      if (listingsWithDistance.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.location_off,
+                                size: 64,
+                                color: Colors.grey.shade400,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                "No products nearby",
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              TextButton(
+                                onPressed: () {
+                                  setState(() => _useLocationFilter = false);
+                                },
+                                child: const Text('Show all products'),
+                              ),
+                            ],
                           ),
-                        ),
-                      ],
-                    ),
+                        );
+                      }
+
+                      return _buildListingList(
+                        listingsWithDistance.map((lwd) => lwd.listing).toList(),
+                        listingsWithDistance,
+                      );
+                    },
                   );
                 }
 
-                return ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: sortedListings.length,
-                  itemBuilder: (context, index) {
-                    return BuyerListingCard(
-                      listing: sortedListings[index],
-                    );
-                  },
-                );
+                // No location filter - show all filtered listings
+                return _buildListingList(sortedListings, null);
               },
             ),
           ),

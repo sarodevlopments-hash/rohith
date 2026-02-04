@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/listing.dart';
@@ -6,6 +7,7 @@ import '../models/sell_type.dart';
 import '../models/food_category.dart';
 import '../models/order.dart';
 import '../widgets/buyer_listing_card.dart';
+import '../services/distance_filter_service.dart';
 import 'add_listing_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -23,6 +25,7 @@ class _HomeScreenState extends State<HomeScreen> {
   double _minPrice = 0;
   double _maxPrice = 10000;
   double _totalSavings = 0;
+  bool _useLocationFilter = true; // Enable location-based filtering by default
 
   @override
   void initState() {
@@ -230,6 +233,57 @@ class _HomeScreenState extends State<HomeScreen> {
 
       return true;
     }).toList();
+  }
+
+  Widget _buildListingList(
+    List<Listing> listings,
+    List<ListingWithDistance>? listingsWithDistance,
+  ) {
+    // Create a map for quick lookup
+    final distanceMap = <String, ListingWithDistance>{};
+    if (listingsWithDistance != null) {
+      for (final lwd in listingsWithDistance) {
+        distanceMap[lwd.listing.key.toString()] = lwd;
+      }
+    }
+
+    if (listings.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.search_off,
+              size: 64,
+              color: Colors.grey.shade400,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              _searchQuery.isNotEmpty || _selectedCategory != null || _selectedType != null
+                  ? "No items found"
+                  : "No food available right now 🍽️",
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey.shade600,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: listings.length,
+      itemBuilder: (context, index) {
+        final listing = listings[index];
+        final listingWithDistance = distanceMap[listing.key.toString()];
+        return BuyerListingCard(
+          listing: listing,
+          listingWithDistance: listingWithDistance,
+        );
+      },
+    );
   }
 
   void _showFiltersDialog() {
@@ -513,51 +567,65 @@ class _HomeScreenState extends State<HomeScreen> {
                 final allListings = box.values.toList();
                 final filteredListings = _filterListings(allListings);
 
-                // Sort: nearby first (for now, just show all), then by discount
-                filteredListings.sort((a, b) {
-                  final discountA = a.originalPrice != null
-                      ? ((a.originalPrice! - a.price) / a.originalPrice!) * 100
-                      : 0;
-                  final discountB = b.originalPrice != null
-                      ? ((b.originalPrice! - b.price) / b.originalPrice!) * 100
-                      : 0;
-                  return discountB.compareTo(discountA); // Higher discount first
-                });
+                // Apply distance filtering if enabled
+                if (_useLocationFilter && filteredListings.isNotEmpty) {
+                  return FutureBuilder<List<ListingWithDistance>>(
+                    future: DistanceFilterService.filterByDistance(filteredListings),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(
+                          child: CircularProgressIndicator(),
+                        );
+                      }
 
-                if (filteredListings.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.search_off,
-                          size: 64,
-                          color: Colors.grey.shade400,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          _searchQuery.isNotEmpty || _selectedCategory != null || _selectedType != null
-                              ? "No items found"
-                              : "No food available right now 🍽️",
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey.shade600,
+                      if (snapshot.hasError) {
+                        debugPrint('[HomeScreen] Distance filter error: ${snapshot.error}');
+                        // Fallback to showing all listings without distance
+                        return _buildListingList(filteredListings, null);
+                      }
+
+                      final listingsWithDistance = snapshot.data ?? [];
+                      
+                      if (listingsWithDistance.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.location_off,
+                                size: 64,
+                                color: Colors.grey.shade400,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                "No products nearby",
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              TextButton(
+                                onPressed: () {
+                                  setState(() => _useLocationFilter = false);
+                                },
+                                child: const Text('Show all products'),
+                              ),
+                            ],
                           ),
-                        ),
-                      ],
-                    ),
+                        );
+                      }
+
+                      return _buildListingList(
+                        listingsWithDistance.map((lwd) => lwd.listing).toList(),
+                        listingsWithDistance,
+                      );
+                    },
                   );
                 }
 
-                return ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: filteredListings.length,
-                  itemBuilder: (context, index) {
-                    return BuyerListingCard(
-                      listing: filteredListings[index],
-                    );
-                  },
-                );
+                // No location filter - show all filtered listings
+                return _buildListingList(filteredListings, null);
               },
             ),
           ),
