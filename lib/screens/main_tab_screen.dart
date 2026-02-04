@@ -8,11 +8,14 @@ import '../services/order_sync_service.dart';
 import '../services/accepted_order_notification_service.dart';
 import '../services/listing_firestore_service.dart';
 import '../services/firestore_verification_service.dart';
+import '../services/location_service.dart';
+import '../widgets/location_header_widget.dart';
 import 'buyer_category_home_screen.dart';
 import 'cart_screen.dart';
 import 'buyer_orders_screen.dart';
 import 'add_listing_screen.dart';
 import 'seller_dashboard_screen.dart';
+import 'location_selection_screen.dart';
 
 class MainTabScreen extends StatefulWidget {
   const MainTabScreen({super.key});
@@ -25,6 +28,8 @@ class _MainTabScreenState extends State<MainTabScreen> {
   int _currentIndex = 0;
   bool _isSellerMode = false;
   final ValueNotifier<int> _sellPromptCounter = ValueNotifier<int>(0);
+  final ValueNotifier<String?> _currentLocation = ValueNotifier<String?>(null);
+  int _locationRefreshKey = 0; // Key to force home screen refresh
   late final ValueListenable<Box<Order>> _ordersListenable;
   VoidCallback? _ordersListener;
 
@@ -391,12 +396,49 @@ class _MainTabScreenState extends State<MainTabScreen> {
         return AppBar(
           elevation: 0,
           backgroundColor: Colors.white,
-          title: const Text(
-            "Food Marketplace",
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                "Food Marketplace",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                  fontSize: 18,
+                ),
+              ),
+              const SizedBox(height: 2),
+              LocationHeaderWidget(
+                onLocationChanged: (address) {
+                  _currentLocation.value = address;
+                  // Trigger product refresh when location changes
+                  LocationService.clearCache();
+                  // Force home screen refresh by updating key
+                  if (mounted) {
+                    setState(() {
+                      _locationRefreshKey++;
+                    });
+                  }
+                },
+                onTap: () async {
+                  final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const LocationSelectionScreen(),
+                    ),
+                  );
+                  if (result != null && mounted) {
+                    _currentLocation.value = result;
+                    LocationService.clearCache();
+                    // Force home screen refresh by updating key
+                    setState(() {
+                      _locationRefreshKey++;
+                    });
+                  }
+                },
+              ),
+            ],
           ),
           actions: [
             _buildCartAction(context),
@@ -429,7 +471,8 @@ class _MainTabScreenState extends State<MainTabScreen> {
   }
 
   Widget _buildBuyerHomeTab() {
-    return const BuyerCategoryHomeScreen();
+    // Use key to force rebuild when location changes
+    return BuyerCategoryHomeScreen(key: ValueKey('home_$_locationRefreshKey'));
   }
 
   List<Widget> _getSellerTabs() {

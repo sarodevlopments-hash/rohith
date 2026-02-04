@@ -70,8 +70,9 @@ class AcceptedOrderNotificationService {
         : null;
 
     final acceptedOrders = ordersBox.values.where((order) {
-      // Check if order is for this buyer and was recently accepted
+      // Check if order is for this buyer
       final isForBuyer = order.userId == userId;
+      if (!isForBuyer) return false;
       
       // STRICT: Never show for pending/payment statuses - only show when seller has actually accepted
       // Exclude these statuses explicitly: PaymentPending, PaymentCompleted, AwaitingSellerConfirmation
@@ -97,6 +98,13 @@ class AcceptedOrderNotificationService {
           debugPrint('[AcceptedOrderNotification] Order ${order.orderId} sellerRespondedAt is invalid (before purchase), skipping');
           return false;
         }
+        // CRITICAL: If order was just created (within last 30 seconds) and seller hasn't responded, skip
+        // This prevents showing notifications for orders that were just placed
+        if (orderTime.isAfter(DateTime.now().subtract(const Duration(seconds: 30))) &&
+            order.sellerRespondedAt!.difference(orderTime).inSeconds < 5) {
+          debugPrint('[AcceptedOrderNotification] Order ${order.orderId} was just created, seller likely hasn\'t responded yet, skipping');
+          return false;
+        }
         // Only show if seller responded recently (within last hour) - prevents showing old notifications
         if (order.sellerRespondedAt!.isBefore(DateTime.now().subtract(const Duration(hours: 1)))) {
           debugPrint('[AcceptedOrderNotification] Order ${order.orderId} seller responded too long ago, skipping');
@@ -114,9 +122,19 @@ class AcceptedOrderNotificationService {
           : (order.orderStatus == 'AcceptedBySeller' || 
              order.orderStatus == 'Confirmed');
       
+      // CRITICAL: Double-check status matches - if status doesn't match accepted status, skip
+      if (!isAccepted) {
+        debugPrint('[AcceptedOrderNotification] Order ${order.orderId} status (${order.orderStatus}) does not match accepted status, skipping');
+        return false;
+      }
+      
       // Only show for recent orders (within last 7 days)
       final orderTime = order.paymentCompletedAt ?? order.purchasedAt;
       final isRecent = orderTime.isAfter(DateTime.now().subtract(const Duration(days: 7)));
+      if (!isRecent) {
+        debugPrint('[AcceptedOrderNotification] Order ${order.orderId} is too old, skipping');
+        return false;
+      }
       
       // Check if already dismissed or persisted as shown - STRICT check
       final notificationKey = 'accepted_${order.orderId}';
@@ -157,7 +175,8 @@ class AcceptedOrderNotificationService {
         }
       }
       
-      return isForBuyer && isAccepted && isRecent;
+      // All checks passed - this order is genuinely accepted
+      return true;
     }).toList()
       ..sort((a, b) =>
           (b.sellerRespondedAt ?? b.purchasedAt)
@@ -214,26 +233,54 @@ class AcceptedOrderNotificationService {
         sellerPhone = data?['sellerPhone'] as String?;
         pickupLocation = data?['sellerPickupLocation'] as String?;
         
-        // CRITICAL: Verify Firestore status matches - if it's pending, don't show notification
+        // CRITICAL: Verify Firestore status FIRST - if it's pending or doesn't match, abort immediately
         if (firestoreStatus != null) {
           final pendingStatuses = ['PaymentPending', 'PaymentCompleted', 'AwaitingSellerConfirmation'];
           if (pendingStatuses.contains(firestoreStatus)) {
             debugPrint('[AcceptedOrderNotification] Order ${order.orderId} Firestore status is pending (${firestoreStatus}), aborting notification');
+            // Also mark as dismissed to prevent re-checking
+            _dismissedNotifications.add(notificationKey);
+            if (Hive.isBoxOpen('acceptedOrderNotificationsBox')) {
+              Hive.box('acceptedOrderNotificationsBox').put(notificationKey, true);
+            }
             _inFlightNotifications.remove(notificationKey);
             return;
           }
           // For regular orders, verify Firestore status is actually accepted
           if (!isLiveKitchen && firestoreStatus != 'AcceptedBySeller' && firestoreStatus != 'Confirmed') {
             debugPrint('[AcceptedOrderNotification] Order ${order.orderId} Firestore status is not accepted (${firestoreStatus}), aborting notification');
+            // Mark as dismissed to prevent re-checking
+            _dismissedNotifications.add(notificationKey);
+            if (Hive.isBoxOpen('acceptedOrderNotificationsBox')) {
+              Hive.box('acceptedOrderNotificationsBox').put(notificationKey, true);
+            }
             _inFlightNotifications.remove(notificationKey);
             return;
           }
+          // CRITICAL: Verify Firestore status matches local status
+          if (firestoreStatus != order.orderStatus) {
+            debugPrint('[AcceptedOrderNotification] Order ${order.orderId} Firestore status (${firestoreStatus}) doesn\'t match local status (${order.orderStatus}), aborting');
+            _inFlightNotifications.remove(notificationKey);
+            return;
+          }
+        } else {
+          // Firestore document exists but no status - this is suspicious, abort
+          debugPrint('[AcceptedOrderNotification] Order ${order.orderId} Firestore document exists but has no status, aborting');
+          _inFlightNotifications.remove(notificationKey);
+          return;
         }
+      } else {
+        // Firestore document doesn't exist - order might not be synced yet, abort to be safe
+        debugPrint('[AcceptedOrderNotification] Order ${order.orderId} Firestore document does not exist, aborting (order may not be synced yet)');
+        _inFlightNotifications.remove(notificationKey);
+        return;
       }
     } catch (e) {
       debugPrint('Failed to get seller details for order ${order.orderId}: $e');
-      // If Firestore check fails, continue with local validation (which is already strict)
-      // This ensures notifications still work if Firestore is temporarily unavailable
+      // If Firestore check fails, abort to be safe (don't show notification if we can't verify)
+      debugPrint('[AcceptedOrderNotification] Firestore check failed, aborting notification to prevent false positives');
+      _inFlightNotifications.remove(notificationKey);
+      return;
     }
 
     // Only show if we have at least seller name

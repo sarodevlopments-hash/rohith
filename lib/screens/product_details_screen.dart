@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart';
 import 'dart:ui';
 import 'package:hive/hive.dart';
 import '../models/listing.dart';
@@ -16,6 +16,10 @@ import '../services/cart_service.dart';
 import '../services/recently_viewed_service.dart';
 import '../services/image_storage_service.dart';
 import '../services/notification_service.dart';
+import '../services/location_service.dart';
+import '../services/seller_profile_service.dart';
+import '../utils/distance_utils.dart';
+import '../utils/location_parser.dart';
 import '../theme/app_theme.dart';
 import '../widgets/seller_name_widget.dart';
 import '../main.dart' show navigatorKey;
@@ -55,6 +59,33 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   void dispose() {
     NotificationService.popBottomInset();
     super.dispose();
+  }
+
+  Future<double?> _calculateDistance() async {
+    try {
+      // Get buyer location
+      final buyerPosition = await LocationService.getCurrentLocation();
+      if (buyerPosition == null) return null;
+
+      // Get seller profile
+      final sellerProfile = await SellerProfileService.getProfile(widget.listing.sellerId);
+      if (sellerProfile == null || sellerProfile.pickupLocation.isEmpty) return null;
+
+      // Parse seller location
+      final sellerCoords = await LocationParser.parseLocation(sellerProfile.pickupLocation);
+      if (sellerCoords == null) return null;
+
+      // Calculate distance
+      return DistanceUtils.calculateDistance(
+        buyerPosition.latitude,
+        buyerPosition.longitude,
+        sellerCoords['latitude']!,
+        sellerCoords['longitude']!,
+      );
+    } catch (e) {
+      debugPrint('[ProductDetailsScreen] Error calculating distance: $e');
+      return null;
+    }
   }
 
   void _autoSelectSizeIfSingle() {
@@ -441,6 +472,34 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                 'by ${widget.listing.sellerName}',
                                 style: AppTheme.bodyMedium.copyWith(color: AppTheme.lightText),
                               ),
+                            const SizedBox(height: 8),
+                            // Distance from seller
+                            FutureBuilder<double?>(
+                              future: _calculateDistance(),
+                              builder: (context, snapshot) {
+                                if (snapshot.hasData && snapshot.data != null) {
+                                  return Row(
+                                    children: [
+                                      Icon(
+                                        Icons.location_on,
+                                        size: 16,
+                                        color: Colors.blue.shade600,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Seller is ${DistanceUtils.formatDistance(snapshot.data!)} away',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.blue.shade600,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                }
+                                return const SizedBox.shrink();
+                              },
+                            ),
                           ],
                         ),
                       ),

@@ -11,11 +11,17 @@ import '../models/rating.dart';
 import '../screens/product_details_screen.dart';
 import '../theme/app_theme.dart';
 import '../services/image_storage_service.dart';
+import '../services/distance_filter_service.dart';
 
 class BuyerListingCard extends StatefulWidget {
   final Listing listing;
+  final ListingWithDistance? listingWithDistance; // Optional distance info
 
-  const BuyerListingCard({super.key, required this.listing});
+  const BuyerListingCard({
+    super.key, 
+    required this.listing,
+    this.listingWithDistance,
+  });
 
   @override
   State<BuyerListingCard> createState() => _BuyerListingCardState();
@@ -252,10 +258,48 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
                       ),
                     ),
                   ),
-                // Discount Badge (Top Right)
-                if (discount > 0)
+                // Distance Badge (Top Right, above discount if both exist)
+                if (widget.listingWithDistance?.distanceInMeters != null)
                   Positioned(
                     top: 12,
+                    right: 12,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade600,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.2),
+                            blurRadius: 4,
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.location_on,
+                            color: Colors.white,
+                            size: 14,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            widget.listingWithDistance!.formattedDistance,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                // Discount Badge (Top Right, below distance if both exist)
+                if (discount > 0)
+                  Positioned(
+                    top: widget.listingWithDistance?.distanceInMeters != null ? 50 : 12,
                     right: 12,
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),

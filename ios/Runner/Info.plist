@@ -46,6 +46,6 @@
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>We use your location to help set the pickup point for your listing.</string>
+	<string>We use your location to show products from nearby sellers and help you discover food items close to you.</string>
 </dict>
 </plist>

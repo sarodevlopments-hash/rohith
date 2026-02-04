@@ -27,6 +27,7 @@ import '../services/listing_validator.dart';
 import '../services/seller_profile_service.dart';
 import '../services/listing_firestore_service.dart';
 import '../services/image_storage_service.dart';
+import 'map_location_picker_screen.dart';
 import 'package:hive/hive.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -925,6 +926,30 @@ class _AddListingScreenState extends State<AddListingScreen> {
     }
   }
 
+  Future<void> _openMapLocationPicker() async {
+    // Open the new map-based location picker
+    final result = await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const MapLocationPickerScreen(
+          mapProvider: MapProvider.google, // Change to MapProvider.mapbox if using Mapbox
+        ),
+      ),
+    );
+
+    if (result != null && mounted) {
+      final latitude = result['latitude'] as double?;
+      final longitude = result['longitude'] as double?;
+      final address = result['address'] as String?;
+
+      if (latitude != null && longitude != null) {
+        sellerPickupLocationController.text = address ?? '$latitude, $longitude';
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Pickup location updated')),
+        );
+      }
+    }
+  }
+
   Future<void> _openNearbyPlaces() async {
     placeSearchController.clear();
     _placeSearchResults.clear();
@@ -1115,7 +1140,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
               subtitle: const Text('Type a nearby landmark or address'),
               onTap: () {
                 Navigator.of(context).pop();
-                _openNearbyPlaces();
+                _openMapLocationPicker();
               },
             ),
             ListTile(
