@@ -16,6 +16,7 @@ import 'buyer_orders_screen.dart';
 import 'add_listing_screen.dart';
 import 'seller_dashboard_screen.dart';
 import 'location_selection_screen.dart';
+import 'buyer_profile_screen.dart';
 
 class MainTabScreen extends StatefulWidget {
   const MainTabScreen({super.key});
@@ -369,6 +370,7 @@ class _MainTabScreenState extends State<MainTabScreen> {
     return [
       _buildBuyerHomeTab(),
       _buildBuyerOrdersTab(),
+      _buildBuyerProfileTab(),
     ];
   }
 
@@ -383,6 +385,10 @@ class _MainTabScreenState extends State<MainTabScreen> {
         return const BuyerOrdersContent();
       },
     );
+  }
+
+  Widget _buildBuyerProfileTab() {
+    return const BuyerProfileScreen();
   }
 
   PreferredSizeWidget? _buildAppBar() {
@@ -450,7 +456,7 @@ class _MainTabScreenState extends State<MainTabScreen> {
             ),
           ],
         );
-      } else {
+      } else if (_currentIndex == 1) {
         // Orders screen
         return AppBar(
           elevation: 0,
@@ -466,6 +472,9 @@ class _MainTabScreenState extends State<MainTabScreen> {
             _buildCartAction(context),
           ],
         );
+      } else {
+        // Profile screen - no AppBar needed (has its own)
+        return null;
       }
     }
   }
@@ -519,6 +528,12 @@ class _MainTabScreenState extends State<MainTabScreen> {
         label: 'Orders',
         isActive: _currentIndex == 1,
         onTap: () => setState(() => _currentIndex = 1),
+      ),
+      _buildTabButton(
+        icon: Icons.person_outline,
+        label: 'Profile',
+        isActive: _currentIndex == 2,
+        onTap: () => setState(() => _currentIndex = 2),
       ),
     ];
   }
