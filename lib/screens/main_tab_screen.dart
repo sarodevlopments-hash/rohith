@@ -240,13 +240,13 @@ class _MainTabScreenState extends State<MainTabScreen> {
       child: SafeArea(
         top: false,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
                 // Mode Switch - More Prominent
                 Container(
-                  padding: const EdgeInsets.all(4),
+                  padding: const EdgeInsets.all(2),
                   decoration: BoxDecoration(
                     color: Colors.grey.shade200,
                     borderRadius: BorderRadius.circular(12),
@@ -263,7 +263,7 @@ class _MainTabScreenState extends State<MainTabScreen> {
                             });
                           },
                           child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            padding: const EdgeInsets.symmetric(vertical: 8),
                             decoration: BoxDecoration(
                               color: !_isSellerMode ? Colors.orange : Colors.transparent,
                               borderRadius: BorderRadius.circular(8),
@@ -308,7 +308,7 @@ class _MainTabScreenState extends State<MainTabScreen> {
                             });
                           },
                           child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            padding: const EdgeInsets.symmetric(vertical: 8),
                             decoration: BoxDecoration(
                               color: _isSellerMode ? Colors.orange : Colors.transparent,
                               borderRadius: BorderRadius.circular(8),
@@ -347,7 +347,7 @@ class _MainTabScreenState extends State<MainTabScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 4),
                 // Tab Navigation
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -365,6 +365,7 @@ class _MainTabScreenState extends State<MainTabScreen> {
         ),
       );
   }
+
 
   List<Widget> _getBuyerTabs() {
     return [
@@ -568,14 +569,14 @@ class _MainTabScreenState extends State<MainTabScreen> {
       child: InkWell(
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.symmetric(vertical: 4),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Container(
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   gradient: isActive
                       ? const LinearGradient(
@@ -599,10 +600,10 @@ class _MainTabScreenState extends State<MainTabScreen> {
                 child: Icon(
                   icon,
                   color: isActive ? Colors.white : Colors.grey.shade500,
-                  size: 24,
+                  size: 22,
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
               Text(
                 label,
                 style: TextStyle(

@@ -36,18 +36,23 @@ Widget build(BuildContext context) {
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Colors.white,
+        toolbarHeight: 44, // Reduced height for more space
         title: const Text(
           'Seller Dashboard',
           style: TextStyle(
             fontWeight: FontWeight.bold,
             color: Colors.black87,
+            fontSize: 17,
           ),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.black87),
+            icon: const Icon(Icons.refresh, color: Colors.black87, size: 20),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
             onPressed: () => setState(() {}),
           ),
+          const SizedBox(width: 8),
         ],
       ),
     body: ValueListenableBuilder(
@@ -88,14 +93,14 @@ Widget build(BuildContext context) {
               final chartData = _getChartData(myOrders, _selectedTimeRange, _customStartDate, _customEndDate);
 
               return SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
                     // Time Range Selector
                     _buildTimeRangeSelector(),
                     if (_selectedTimeRange == 'Custom') ...[
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 6),
                       Row(
                         children: [
                           Expanded(
@@ -124,31 +129,31 @@ Widget build(BuildContext context) {
                           ),
                         ),
                     ],
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 8),
 
                     // Key Metrics Cards
                     _buildMetricsRow(metrics),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 12),
 
                     // Sales Chart
                     _buildSalesChart(chartData),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 12),
 
                     // Pending Orders (New Orders Awaiting Approval) - ALWAYS SHOW THIS SECTION
                     _buildPendingOrdersSection(myOrders),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 12),
                     
                     // Show all orders that should have accept/reject buttons
                     _buildAllOrdersNeedingActionSection(myOrders),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 12),
                     
                     // Live Kitchen Orders
                     _buildLiveKitchenOrdersSection(myOrders),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 12),
 
                     // Debug: Show all orders (temporary - for troubleshooting)
                     _buildAllOrdersDebugSection(myOrders),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 12),
 
                     // Quick Actions
                     _buildQuickActions(),

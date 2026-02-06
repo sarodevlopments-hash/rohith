@@ -1,8 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 /// Service to check Firestore connectivity and diagnose issues
 class FirestoreConnectivityCheck {
-  static final FirebaseFirestore _db = FirebaseFirestore.instance;
+  static FirebaseFirestore get _db => FirebaseFirestore.instanceFor(
+    app: Firebase.app(),
+    databaseId: 'reqfood',
+  );
 
   /// Test Firestore connection by attempting a simple read
   static Future<bool> testConnection() async {
