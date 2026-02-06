@@ -32,19 +32,39 @@ import 'package:hive/hive.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../theme/app_theme.dart';
+import '../models/item_list.dart';
+import '../services/item_list_service.dart';
+import 'manage_item_lists_screen.dart';
 
 class AddListingScreen extends StatefulWidget {
   final ValueNotifier<int>? promptCounter;
   final VoidCallback? onBackToDashboard;
-  const AddListingScreen({super.key, this.promptCounter, this.onBackToDashboard});
+  final ItemList? initialItemList; // For loading a saved list
+  const AddListingScreen({
+    super.key,
+    this.promptCounter,
+    this.onBackToDashboard,
+    this.initialItemList,
+  });
 
   @override
   State<AddListingScreen> createState() => _AddListingScreenState();
 }
 
-class _AddListingScreenState extends State<AddListingScreen> {
+class _AddListingScreenState extends State<AddListingScreen> with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _scrollController = ScrollController();
+  
+  // Animation controllers for buttons
+  late AnimationController _continueButtonFlickerController; // Flickering effect
+  late AnimationController _continueButtonScaleController; // Scale on tap
+  late AnimationController _cancelButtonScaleController; // Scale on tap
+  late AnimationController _multiItemCardAnimationController; // Multi-item card animation
+  late Animation<double> _continueButtonFlickerAnimation; // Flicker opacity
+  late Animation<double> _continueButtonScaleAnimation;
+  late Animation<double> _cancelButtonScaleAnimation;
+  late Animation<double> _multiItemCardScaleAnimation;
+  late Animation<double> _multiItemCardGlowAnimation;
 
   // Controllers
   final nameController = TextEditingController();
@@ -124,6 +144,10 @@ class _AddListingScreenState extends State<AddListingScreen> {
   bool isMultiItemMode = false;
   List<PendingListingItem> pendingItems = [];
   
+  // Item Lists support
+  List<ItemList> savedItemLists = [];
+  bool isLoadingItemLists = false;
+  
   // Scheduling support
   bool enableScheduling = false;
   ScheduleType? selectedScheduleType;
@@ -138,9 +162,119 @@ class _AddListingScreenState extends State<AddListingScreen> {
   @override
   void initState() {
     super.initState();
+    
+    // Initialize animation controllers
+    // Flickering effect for continue button icon
+    _continueButtonFlickerController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    )..repeat(reverse: true);
+    
+    // Scale controllers for tap animations
+    _continueButtonScaleController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 150),
+    );
+    
+    _cancelButtonScaleController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 150),
+    );
+    
+    // Multi-item card animation controller
+    _multiItemCardAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    
+    // Flickering animation for continue button icon (opacity flicker)
+    _continueButtonFlickerAnimation = Tween<double>(
+      begin: 0.6,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _continueButtonFlickerController,
+      curve: Curves.easeInOut,
+    ));
+    
+    // Scale animations for both buttons (on tap)
+    _continueButtonScaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.92,
+    ).animate(CurvedAnimation(
+      parent: _continueButtonScaleController,
+      curve: Curves.easeInOut,
+    ));
+    
+    _cancelButtonScaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.92,
+    ).animate(CurvedAnimation(
+      parent: _cancelButtonScaleController,
+      curve: Curves.easeInOut,
+    ));
+    
+    // Multi-item card animations
+    _multiItemCardScaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 1.01,
+    ).animate(CurvedAnimation(
+      parent: _multiItemCardAnimationController,
+      curve: Curves.easeOut,
+    ));
+    
+    _multiItemCardGlowAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _multiItemCardAnimationController,
+      curve: Curves.easeOut,
+    ));
+    
     _loadSellerProfile();
+    _loadSavedItemLists();
+    // Load initial item list if provided
+    if (widget.initialItemList != null) {
+      _loadItemList(widget.initialItemList!);
+    }
     widget.promptCounter?.addListener(_onPromptRequested);
     _productNameFocusNode.addListener(_onProductNameFocusChange);
+  }
+  
+  Future<void> _loadSavedItemLists() async {
+    final currentSellerId = sellerId;
+    if (currentSellerId == null) return;
+    
+    setState(() => isLoadingItemLists = true);
+    try {
+      final lists = await ItemListService.getItemLists(currentSellerId);
+      setState(() {
+        savedItemLists = lists;
+        isLoadingItemLists = false;
+      });
+    } catch (e) {
+      setState(() => isLoadingItemLists = false);
+      print('Failed to load item lists: $e');
+    }
+  }
+  
+  void _loadItemList(ItemList list) {
+    setState(() {
+      isMultiItemMode = true;
+      pendingItems = List.from(list.items);
+    });
+    // Mark list as used
+    ItemListService.markListAsUsed(list.sellerId, list.id);
+    // Defer SnackBar until after widget is built (can't use ScaffoldMessenger in initState)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${list.itemCount} items loaded from "${list.name}"'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    });
   }
 
   void _onProductNameFocusChange() {
@@ -156,6 +290,10 @@ class _AddListingScreenState extends State<AddListingScreen> {
 
   @override
   void dispose() {
+    _continueButtonFlickerController.dispose();
+    _continueButtonScaleController.dispose();
+    _cancelButtonScaleController.dispose();
+    _multiItemCardAnimationController.dispose();
     _placeSearchDebounce?.cancel();
     _productNameDebounce?.cancel();
     _removeProductSuggestionOverlay();
@@ -498,15 +636,15 @@ class _AddListingScreenState extends State<AddListingScreen> {
             String? _typeImagePath(SellType t) {
               switch (t) {
                 case SellType.cookedFood:
-                  return 'assets/images/categories/cookedfood.png';
+                  return 'assets/images/categories/food.jpg';
                 case SellType.groceries:
-                  return 'assets/images/categories/gro.png';
+                  return 'assets/images/categories/groc.png';
                 case SellType.vegetables:
-                  return 'assets/images/categories/vegs and fruitrs.png';
+                  return 'assets/images/categories/vegetables_fruits.jpg';
                 case SellType.clothingAndApparel:
-                  return 'assets/images/categories/clothesand app.png';
+                  return 'assets/images/categories/clthapp.png';
                 case SellType.liveKitchen:
-                  return 'assets/images/categories/live kitchen.png';
+                  return 'assets/images/categories/livfd.png';
               }
             }
 
@@ -525,143 +663,152 @@ class _AddListingScreenState extends State<AddListingScreen> {
               }
             }
 
-            LinearGradient? _typeGradient(SellType t) {
-              if (t != SellType.liveKitchen) return null;
-              return const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFFFF8A00), Color(0xFFFF3D00)],
-              );
-            }
-
             Widget _typeCard(SellType t) {
               final isSelected = tempType == t;
-              final base = _typeColor(t);
-              final gradient = _typeGradient(t);
 
               return GestureDetector(
                 onTap: () => setStateDialog(() => tempType = t),
                 child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  curve: Curves.easeOut,
-                  padding: const EdgeInsets.all(14),
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOutCubic,
                   decoration: BoxDecoration(
-                    color: gradient == null
-                        ? base.withOpacity(isSelected ? 0.16 : 0.10)
-                        : null,
-                    gradient: gradient != null
-                        ? LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: isSelected
-                                ? [
-                                    gradient.colors[0].withOpacity(0.22),
-                                    gradient.colors[1].withOpacity(0.22),
-                                  ]
-                                : [
-                                    gradient.colors[0].withOpacity(0.12),
-                                    gradient.colors[1].withOpacity(0.12),
-                                  ],
-                          )
-                        : null,
                     borderRadius: BorderRadius.circular(18),
-                    border: Border.all(
-                      color: isSelected
-                          ? base.withOpacity(0.9)
-                          : base.withOpacity(0.18),
-                      width: isSelected ? 2 : 1,
-                    ),
                     boxShadow: isSelected
                         ? [
                             BoxShadow(
-                              color: base.withOpacity(0.18),
-                              blurRadius: 14,
-                              offset: const Offset(0, 6),
+                              color: Colors.black.withOpacity(0.15),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                              spreadRadius: 0,
                             ),
                           ]
-                        : [],
+                        : [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.08),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                              spreadRadius: 0,
+                            ),
+                          ],
                   ),
-                  child: Stack(
-                    children: [
-                      if (isSelected)
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(18),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        // Full-width background image
+                        _typeImagePath(t) != null
+                            ? Image.asset(
+                                _typeImagePath(t)!,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  // Fallback to colored background with icon
+                                  return Container(
+                                    color: _typeColor(t).withOpacity(0.1),
+                                    child: Center(
+                                      child: Icon(
+                                        _typeIcon(t),
+                                        size: 48,
+                                        color: _typeColor(t),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              )
+                            : Container(
+                                color: _typeColor(t).withOpacity(0.1),
+                                child: Center(
+                                  child: Icon(
+                                    _typeIcon(t),
+                                    size: 48,
+                                    color: _typeColor(t),
+                                  ),
+                                ),
+                              ),
+                        // Dark gradient overlay at bottom
                         Positioned(
-                          top: 0,
+                          bottom: 0,
+                          left: 0,
                           right: 0,
                           child: Container(
-                            padding: const EdgeInsets.all(5),
+                            height: 120,
                             decoration: BoxDecoration(
-                              color: base.withOpacity(0.95),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.check_rounded,
-                              size: 16,
-                              color: Colors.white,
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Colors.transparent,
+                                  Colors.black.withOpacity(0.3),
+                                  Colors.black.withOpacity(0.75),
+                                ],
+                              ),
                             ),
                           ),
                         ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Align(
-                            alignment: Alignment.topLeft,
+                        // Selection indicator (tick badge at top-right)
+                        if (isSelected)
+                          Positioned(
+                            top: 10,
+                            right: 10,
                             child: Container(
-                              height: 44,
-                              width: 44,
+                              padding: const EdgeInsets.all(6),
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.95),
-                                borderRadius: BorderRadius.circular(14),
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.2),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
                               ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(14),
-                                child: _typeImagePath(t) != null
-                                    ? Image.asset(
-                                        _typeImagePath(t)!,
-                                        fit: BoxFit.cover,
-                                        width: 44,
-                                        height: 44,
-                                        errorBuilder: (context, error, stackTrace) {
-                                          // Fallback to icon if image fails
-                                          return Icon(
-                                            _typeIcon(t),
-                                            size: 24,
-                                            color: base,
-                                          );
-                                        },
-                                      )
-                                    : Icon(
-                                        _typeIcon(t),
-                                        size: 24,
-                                        color: base,
-                                      ),
+                              child: const Icon(
+                                Icons.check_circle_rounded,
+                                color: Colors.green,
+                                size: 20,
                               ),
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            _typeTitle(t),
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
+                        // Text content at bottom
+                        Positioned(
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _typeTitle(t),
+                                  style: const TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                    letterSpacing: 0.2,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _typeHint(t),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.white.withOpacity(0.85),
+                                    height: 1.2,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
                             ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            _typeHint(t),
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade700,
-                              height: 1.2,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               );
@@ -727,8 +874,8 @@ class _AddListingScreenState extends State<AddListingScreen> {
                         final screenWidth = MediaQuery.of(ctx).size.width;
                         final useTwoColumns = screenWidth >= 360;
                         final crossAxisCount = useTwoColumns ? 2 : 1;
-                        // Fixed card height to avoid overflow; slightly taller on wider screens
-                        final cardHeight = useTwoColumns ? 150.0 : 140.0;
+                        // Larger card height for image-first design (visually dominant)
+                        final cardHeight = useTwoColumns ? 180.0 : 200.0;
                         final types = [
                           SellType.cookedFood,
                           SellType.groceries,
@@ -743,8 +890,8 @@ class _AddListingScreenState extends State<AddListingScreen> {
                           itemCount: types.length,
                           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: crossAxisCount,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 12,
+                            crossAxisSpacing: 16,
+                            mainAxisSpacing: 16,
                             mainAxisExtent: cardHeight,
                           ),
                           itemBuilder: (context, index) => _typeCard(types[index]),
@@ -2244,73 +2391,178 @@ class _AddListingScreenState extends State<AddListingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.grey.shade50,
+            Colors.purple.shade50.withOpacity(0.3),
+            Colors.blue.shade50.withOpacity(0.2),
+          ],
+        ),
+      ),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.white,
-        leading: IconButton(
-          icon: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(12),
+        backgroundColor: Colors.transparent,
+        leading: Container(
+          margin: const EdgeInsets.only(left: 4),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                if (widget.onBackToDashboard != null) {
+                  widget.onBackToDashboard!();
+                } else {
+                  Navigator.pop(context);
+                }
+              },
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Colors.grey.shade100,
+                      Colors.grey.shade50,
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.arrow_back_ios_new_rounded,
+                  color: Colors.black87,
+                  size: 18,
+                ),
+              ),
             ),
-            child: const Icon(Icons.arrow_back_ios_new, color: Colors.black87, size: 18),
           ),
-          onPressed: () {
-            if (widget.onBackToDashboard != null) {
-              widget.onBackToDashboard!();
-            } else {
-              Navigator.pop(context);
-            }
-          },
         ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "Start Selling",
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                color: Colors.black87,
-                fontSize: 22,
-                letterSpacing: -0.5,
+        title: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          AppTheme.primaryColor,
+                          AppTheme.primaryColor.withOpacity(0.8),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(10),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.primaryColor.withOpacity(0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.storefront_rounded,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "Start Selling",
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            color: Colors.grey.shade900,
+                            fontSize: 23,
+                            letterSpacing: -0.6,
+                            height: 1.1,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          "List your products",
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade600,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0.1,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ),
-            Text(
-              "List your products",
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey.shade600,
-                fontWeight: FontWeight.w400,
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
         actions: [
           if (sellerProfile != null)
             Container(
               margin: const EdgeInsets.only(right: 8),
-              child: IconButton(
-                icon: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [AppTheme.warningColor.withOpacity(0.15), AppTheme.warningColor.withOpacity(0.08)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () {
+                    setState(() {
+                      showSellerProfileForm = true;
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(14),
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          AppTheme.primaryColor,
+                          AppTheme.primaryColor.withOpacity(0.85),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.primaryColor.withOpacity(0.4),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                          spreadRadius: 0,
+                        ),
+                        BoxShadow(
+                          color: AppTheme.primaryColor.withOpacity(0.2),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                          spreadRadius: 0,
+                        ),
+                      ],
                     ),
-                    borderRadius: BorderRadius.circular(12),
+                    child: const Icon(
+                      Icons.edit_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
                   ),
-                  child: const Icon(Icons.edit_rounded, color: AppTheme.warningColor, size: 20),
                 ),
-                tooltip: "Edit Profile",
-                onPressed: () {
-                  setState(() {
-                    showSellerProfileForm = true;
-                  });
-                },
               ),
             ),
         ],
@@ -2320,7 +2572,11 @@ class _AddListingScreenState extends State<AddListingScreen> {
             height: 1,
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [Colors.transparent, Colors.grey.shade200, Colors.transparent],
+                colors: [
+                  Colors.transparent,
+                  Colors.grey.shade200.withOpacity(0.5),
+                  Colors.transparent,
+                ],
               ),
             ),
           ),
@@ -2332,37 +2588,6 @@ class _AddListingScreenState extends State<AddListingScreen> {
           controller: _scrollController,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           children: [
-            // Multi-Item Mode Toggle
-            _buildCard(
-              SwitchListTile(
-                title: const Text(
-                  'Multiple Items Mode',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
-                ),
-                subtitle: Text(
-                  isMultiItemMode 
-                      ? 'Add multiple items before posting'
-                      : 'Post one item at a time',
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-                ),
-                value: isMultiItemMode,
-                onChanged: (value) {
-                  setState(() {
-                    isMultiItemMode = value;
-                    if (!value) {
-                      // Clear pending items when switching back to single mode
-                      pendingItems.clear();
-                    }
-                  });
-                },
-                secondary: Icon(
-                  isMultiItemMode ? Icons.list : Icons.add_circle_outline,
-                  color: isMultiItemMode ? Colors.orange : Colors.grey,
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
             // Pending Items List (when in multi-item mode)
             if (isMultiItemMode && pendingItems.isNotEmpty) ...[
               _buildSectionTitle(
@@ -2407,6 +2632,56 @@ class _AddListingScreenState extends State<AddListingScreen> {
               const SizedBox(height: 16),
             ],
 
+            // Saved Item Lists (Premium Feature)
+            if (sellerProfile != null && (isMultiItemMode || savedItemLists.isNotEmpty)) ...[
+              _buildSectionTitle("Saved Item Lists", icon: Icons.inventory_2_rounded, iconColor: AppTheme.primaryColor),
+              if (isLoadingItemLists)
+                const Center(child: Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: CircularProgressIndicator(),
+                ))
+              else if (savedItemLists.isEmpty)
+                _buildCard(
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline, color: Colors.grey.shade400, size: 20),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'No saved lists yet. Create one after adding items.',
+                            style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                ...savedItemLists.take(3).map((list) => _buildSavedListCard(list)),
+              if (savedItemLists.length > 3)
+                _buildCard(
+                  TextButton.icon(
+                    onPressed: () async {
+                      final result = await Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const ManageItemListsScreen()),
+                      );
+                      if (result == true) {
+                        _loadSavedItemLists();
+                      }
+                    },
+                    icon: Icon(Icons.arrow_forward_rounded, size: 18, color: AppTheme.primaryColor),
+                    label: Text(
+                      'View All Lists (${savedItemLists.length})',
+                      style: TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 16),
+            ],
+            
             // Previous Items Selection
             if (sellerProfile != null) ...[
               _buildSectionTitle("Quick Post", icon: Icons.history, iconColor: Colors.blue),
@@ -2443,43 +2718,160 @@ class _AddListingScreenState extends State<AddListingScreen> {
               const SizedBox(height: 8),
             ],
 
-            // Seller Profile Form (One-time entry)
+            // Seller Profile Form (One-time entry) - Premium Redesign
             if (showSellerProfileForm) ...[
-              _buildSectionTitle(
-                isFirstTimeSeller ? "Seller Information" : "Update Seller Information",
-                icon: Icons.person,
-                iconColor: Colors.purple,
-              ),
-              _buildCard(
-                Column(
+              // Modern Header with Progress Indicator
+              Container(
+                margin: const EdgeInsets.only(bottom: 24, top: 8),
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Colors.purple.shade50,
+                      Colors.blue.shade50,
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: Colors.purple.shade100.withOpacity(0.5),
+                    width: 1,
+                  ),
+                ),
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    TextFormField(
-                      controller: sellerNameController,
-                      decoration: InputDecoration(
-                        labelText: "Seller Name *",
-                        prefixIcon: const Icon(Icons.business),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.purple.withOpacity(0.1),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Icon(
+                            Icons.storefront_rounded,
+                            color: Colors.purple.shade600,
+                            size: 24,
+                          ),
                         ),
-                        filled: true,
-                        fillColor: Colors.grey.shade50,
-                      ),
-                      validator: (v) => v?.isEmpty ?? true ? "Required" : null,
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                isFirstTimeSeller ? "Seller Information" : "Update Seller Information",
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.grey.shade900,
+                                  letterSpacing: -0.5,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                "Tell us about your business to start selling",
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey.shade600,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 16),
-                    if (selectedType == SellType.cookedFood) ...[
-                      DropdownButtonFormField<CookedFoodSource>(
-                        value: selectedCookedFoodSource,
-                        decoration: InputDecoration(
-                          labelText: "Food Source *",
-                          prefixIcon: const Icon(Icons.store),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
+                    // Progress Indicator
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.purple.shade600,
+                            borderRadius: BorderRadius.circular(20),
                           ),
-                          filled: true,
-                          fillColor: Colors.grey.shade50,
+                          child: Text(
+                            "Step 1 of 2",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: 0.5,
+                              backgroundColor: Colors.grey.shade200,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.purple.shade600),
+                              minHeight: 6,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              
+              // Premium Card with Soft Shadow
+              Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.04),
+                      blurRadius: 20,
+                      offset: const Offset(0, 4),
+                      spreadRadius: 0,
+                    ),
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.02),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                      spreadRadius: 0,
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Seller Name Field
+                    _buildPremiumTextField(
+                      controller: sellerNameController,
+                      label: "Seller Name",
+                      hint: "Enter your business name",
+                      icon: Icons.store_rounded,
+                      iconColor: Colors.blue.shade600,
+                      validator: (v) => v?.isEmpty ?? true ? "Required" : null,
+                    ),
+                    const SizedBox(height: 20),
+                    
+                    // Food Source (only for cooked food)
+                    if (selectedType == SellType.cookedFood) ...[
+                      _buildPremiumDropdown<CookedFoodSource>(
+                        value: selectedCookedFoodSource,
+                        label: "Food Source",
+                        hint: "Select where you prepare food",
+                        icon: Icons.restaurant_rounded,
+                        iconColor: Colors.orange.shade600,
                         items: CookedFoodSource.values.map((c) {
                           return DropdownMenuItem(
                             value: c,
@@ -2491,98 +2883,33 @@ class _AddListingScreenState extends State<AddListingScreen> {
                             ? (v) => v == null ? "Required" : null
                             : null,
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 20),
                     ],
-                    // FSSAI License - Only required for cooked food
+                    
+                    // FSSAI License (only for cooked food)
                     if (selectedType == SellType.cookedFood) ...[
-                      TextFormField(
+                      _buildPremiumTextField(
                         controller: sellerFssaiController,
-                        decoration: InputDecoration(
-                          labelText: "FSSAI License Number *",
-                          prefixIcon: const Icon(Icons.verified),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          hintText: "Enter FSSAI license number",
-                          filled: true,
-                          fillColor: Colors.grey.shade50,
-                        ),
+                        label: "FSSAI License Number",
+                        hint: "Enter your FSSAI license number",
+                        icon: Icons.verified_user_rounded,
+                        iconColor: Colors.green.shade600,
                         validator: (v) => v?.isEmpty ?? true ? "Required" : null,
                       ),
-                      const SizedBox(height: 12),
-                      Container(
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey.shade300),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: InkWell(
-                          onTap: _pickFssaiLicense,
-                          borderRadius: BorderRadius.circular(12),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Row(
-                              children: [
-                                Icon(Icons.attach_file, color: Colors.orange),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        fssaiLicenseFile == null
-                                            ? "Attach FSSAI License Document"
-                                            : "Document: ${fssaiLicenseFile!.name}",
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: fssaiLicenseFile == null
-                                              ? FontWeight.normal
-                                              : FontWeight.w600,
-                                          color: fssaiLicenseFile == null
-                                              ? Colors.grey.shade600
-                                              : Colors.green.shade700,
-                                        ),
-                                      ),
-                                      if (fssaiLicenseFile != null)
-                                        Text(
-                                          "${(fssaiLicenseFile!.size / 1024).toStringAsFixed(2)} KB",
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.grey.shade600,
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                                if (fssaiLicenseFile != null)
-                                  IconButton(
-                                    icon: const Icon(Icons.close, color: Colors.red),
-                                    onPressed: () {
-                                      setState(() {
-                                        fssaiLicenseFile = null;
-                                      });
-                                    },
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
+                      const SizedBox(height: 16),
+                      // FSSAI Document Upload
+                      _buildDocumentUploadCard(),
+                      const SizedBox(height: 20),
                     ],
-                    const SizedBox(height: 16),
-                    // Phone Number
-                    TextFormField(
+                    
+                    // Phone Number Field
+                    _buildPremiumTextField(
                       controller: sellerPhoneController,
+                      label: "Contact Number",
+                      hint: "9876543210",
+                      icon: Icons.phone_rounded,
+                      iconColor: Colors.purple.shade600,
                       keyboardType: TextInputType.phone,
-                      decoration: InputDecoration(
-                        labelText: "Contact Number *",
-                        prefixIcon: const Icon(Icons.phone),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        filled: true,
-                        fillColor: Colors.grey.shade50,
-                        hintText: "9876543210",
-                      ),
                       validator: (v) {
                         if (v == null || v.trim().isEmpty) {
                           return "Required";
@@ -2594,69 +2921,211 @@ class _AddListingScreenState extends State<AddListingScreen> {
                         return null;
                       },
                     ),
-                    const SizedBox(height: 16),
-                    // Pickup Location
-                    TextFormField(
+                    const SizedBox(height: 20),
+                    
+                    // Pickup Location Field
+                    _buildPremiumTextField(
                       controller: sellerPickupLocationController,
+                      label: "Pickup / Collection Location",
+                      hint: "Tap locator to use current location",
+                      icon: Icons.location_on_rounded,
+                      iconColor: Colors.red.shade600,
                       maxLines: 2,
-                      decoration: InputDecoration(
-                        labelText: "Pickup / Collection Location *",
-                        prefixIcon: const Icon(Icons.location_on),
-                        suffixIcon: Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: isFetchingLocation
-                              ? const SizedBox(
-                                  width: 22,
-                                  height: 22,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : IconButton(
-                                  icon: const Icon(Icons.my_location),
-                                  tooltip: "Use current or nearby location",
-                                  onPressed: _showLocationPicker,
-                                ),
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        filled: true,
-                        fillColor: Colors.grey.shade50,
-                        hintText: "Tap locator to use current or nearby location",
+                      suffixIcon: Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: isFetchingLocation
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : IconButton(
+                                icon: Icon(Icons.my_location_rounded, color: Colors.red.shade600),
+                                tooltip: "Use current or nearby location",
+                                onPressed: _showLocationPicker,
+                              ),
                       ),
                       validator: (v) => v?.isEmpty ?? true ? "Required" : null,
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 24),
+                    
+                    // Action Buttons - Premium Design with Animations
                     Row(
                       children: [
+                        // Cancel Button - Elegant & Subtle with Scale Animation
                         Expanded(
-                          child: OutlinedButton(
-                            onPressed: () {
+                          child: GestureDetector(
+                            onTapDown: (_) => _cancelButtonScaleController.forward(),
+                            onTapUp: (_) {
+                              _cancelButtonScaleController.reverse();
                               setState(() {
                                 showSellerProfileForm = false;
                               });
                             },
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            child: const Text("Cancel"),
+                            onTapCancel: () => _cancelButtonScaleController.reverse(),
+                            child: AnimatedBuilder(
+                              animation: _cancelButtonScaleAnimation,
+                              builder: (context, child) {
+                                return Transform.scale(
+                                  scale: _cancelButtonScaleAnimation.value,
+                                        child: Material(
+                                          color: Colors.transparent,
+                                          child: InkWell(
+                                            onTap: () {
+                                              setState(() {
+                                                showSellerProfileForm = false;
+                                              });
+                                            },
+                                            borderRadius: BorderRadius.circular(18),
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(vertical: 18),
+                                              decoration: BoxDecoration(
+                                                color: Colors.white,
+                                                borderRadius: BorderRadius.circular(18),
+                                                border: Border.all(
+                                                  color: Colors.grey.shade300,
+                                                  width: 1.5,
+                                                ),
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: Colors.black.withOpacity(0.04),
+                                                    blurRadius: 8,
+                                                    offset: const Offset(0, 2),
+                                                  ),
+                                                ],
+                                              ),
+                                              child: Row(
+                                                mainAxisAlignment: MainAxisAlignment.center,
+                                                children: [
+                                                  Icon(
+                                                    Icons.close_rounded,
+                                                    size: 18,
+                                                    color: Colors.grey.shade600,
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  Text(
+                                                    "Cancel",
+                                                    style: TextStyle(
+                                                      color: Colors.grey.shade700,
+                                                      fontWeight: FontWeight.w600,
+                                                      fontSize: 15,
+                                                      letterSpacing: 0.2,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 16),
+                        // Continue Button - Vibrant & Premium with Rotation & Scale Animation
                         Expanded(
-                          child: ElevatedButton(
-                            onPressed: _saveSellerProfile,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.orange,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
+                          flex: 2,
+                          child: GestureDetector(
+                            onTapDown: (_) => _continueButtonScaleController.forward(),
+                            onTapUp: (_) {
+                              _continueButtonScaleController.reverse();
+                              _saveSellerProfile();
+                            },
+                            onTapCancel: () => _continueButtonScaleController.reverse(),
+                            child: AnimatedBuilder(
+                              animation: _continueButtonScaleAnimation,
+                              builder: (context, scaleChild) {
+                                return AnimatedBuilder(
+                                  animation: _continueButtonFlickerAnimation,
+                                  builder: (context, flickerChild) {
+                                    return Transform.scale(
+                                      scale: _continueButtonScaleAnimation.value,
+                                      child: Material(
+                                        color: Colors.transparent,
+                                        child: InkWell(
+                                          onTap: _saveSellerProfile,
+                                          borderRadius: BorderRadius.circular(18),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(vertical: 18),
+                                            decoration: BoxDecoration(
+                                              gradient: LinearGradient(
+                                                begin: Alignment.topLeft,
+                                                end: Alignment.bottomRight,
+                                                colors: [
+                                                  AppTheme.primaryColor,
+                                                  AppTheme.primaryColor.withOpacity(0.85),
+                                                ],
+                                              ),
+                                              borderRadius: BorderRadius.circular(18),
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: AppTheme.primaryColor.withOpacity(0.4),
+                                                  blurRadius: 12,
+                                                  offset: const Offset(0, 4),
+                                                  spreadRadius: 0,
+                                                ),
+                                                BoxShadow(
+                                                  color: AppTheme.primaryColor.withOpacity(0.2),
+                                                  blurRadius: 6,
+                                                  offset: const Offset(0, 2),
+                                                  spreadRadius: 0,
+                                                ),
+                                              ],
+                                            ),
+                                            child: Row(
+                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              children: [
+                                                Text(
+                                                  "Continue",
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.w700,
+                                                    fontSize: 16,
+                                                    color: Colors.white,
+                                                    letterSpacing: 0.3,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Opacity(
+                                                  opacity: _continueButtonFlickerAnimation.value,
+                                                  child: Container(
+                                                    padding: const EdgeInsets.all(6),
+                                                    decoration: BoxDecoration(
+                                                      gradient: LinearGradient(
+                                                        begin: Alignment.topLeft,
+                                                        end: Alignment.bottomRight,
+                                                        colors: [
+                                                          Colors.white.withOpacity(0.5),
+                                                          Colors.white.withOpacity(0.3),
+                                                        ],
+                                                      ),
+                                                      borderRadius: BorderRadius.circular(8),
+                                                      boxShadow: [
+                                                        BoxShadow(
+                                                          color: Colors.white.withOpacity(0.4 * _continueButtonFlickerAnimation.value),
+                                                          blurRadius: 6,
+                                                          offset: const Offset(0, 2),
+                                                          spreadRadius: 2,
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    child: const Icon(
+                                                      Icons.thumb_up_rounded,
+                                                      size: 18,
+                                                      color: Colors.white,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                );
+                              },
                             ),
-                            child: const Text("Save"),
                           ),
                         ),
                       ],
@@ -2667,48 +3136,201 @@ class _AddListingScreenState extends State<AddListingScreen> {
               const SizedBox(height: 8),
             ],
 
-            // Bulk Food Option (only for cooked food) - BEFORE Item Details
+            // Bulk Food Option (only for cooked food) - Premium Feature Card
             if (selectedType == SellType.cookedFood) ...[
-              _buildSectionTitle("Bulk/Catering Option", icon: Icons.groups, iconColor: Colors.purple),
-              _buildCard(
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SwitchListTile(
-                      title: const Text(
-                        'Bulk/Group Food Item',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      subtitle: Text(
-                        isBulkFood 
-                            ? 'This item serves multiple people (e.g., Biryani for 25)'
-                            : 'Enable for catering-style food items',
-                        style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-                      ),
-                      value: isBulkFood,
-                      onChanged: (value) {
-                        setState(() {
-                          isBulkFood = value;
-                          if (!value) {
-                            servesCountController.clear();
-                            portionDescriptionController.clear();
-                          }
-                        });
-                      },
-                      secondary: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: isBulkFood ? Colors.purple.shade50 : Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(
-                          isBulkFood ? Icons.groups : Icons.person,
-                          color: isBulkFood ? Colors.purple : Colors.grey,
-                        ),
+              Container(
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: isBulkFood
+                        ? [
+                            Colors.purple.shade50,
+                            Colors.purple.shade50.withOpacity(0.6),
+                            Colors.grey.shade50,
+                          ]
+                        : [
+                            Colors.grey.shade50,
+                            Colors.white,
+                          ],
+                  ),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: isBulkFood
+                        ? Colors.purple.shade300.withOpacity(0.4)
+                        : Colors.grey.shade200,
+                    width: isBulkFood ? 1.5 : 1,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: isBulkFood
+                          ? Colors.purple.withOpacity(0.15)
+                          : Colors.black.withOpacity(0.04),
+                      blurRadius: isBulkFood ? 16 : 12,
+                      offset: const Offset(0, 4),
+                      spreadRadius: isBulkFood ? 2 : 0,
+                    ),
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.02),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () {
+                      setState(() {
+                        isBulkFood = !isBulkFood;
+                        if (!isBulkFood) {
+                          servesCountController.clear();
+                          portionDescriptionController.clear();
+                        }
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(18),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      child: Row(
+                        children: [
+                          // Feature Icon - Smaller and refined
+                          Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: isBulkFood
+                                    ? [
+                                        Colors.purple.shade600,
+                                        Colors.purple.shade500,
+                                      ]
+                                    : [
+                                        Colors.grey.shade300,
+                                        Colors.grey.shade200,
+                                      ],
+                              ),
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: isBulkFood
+                                      ? Colors.purple.withOpacity(0.25)
+                                      : Colors.grey.withOpacity(0.15),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                  spreadRadius: 0,
+                                ),
+                              ],
+                            ),
+                            child: Icon(
+                              Icons.groups_rounded,
+                              color: Colors.white,
+                              size: 22,
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          // Text Content - Compact and refined
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        'Bulk/Catering Option',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 15,
+                                          color: Colors.grey.shade900,
+                                          letterSpacing: -0.2,
+                                          height: 1.2,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 5),
+                                Text(
+                                  isBulkFood 
+                                      ? 'This item serves multiple people (e.g., Biryani for 25)'
+                                      : 'Enable for catering-style food items',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.grey.shade600,
+                                    fontWeight: FontWeight.w400,
+                                    height: 1.3,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          // Premium Toggle - Smaller and refined
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            width: 48,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(14),
+                              color: isBulkFood
+                                  ? Colors.purple.shade600
+                                  : Colors.grey.shade300,
+                              boxShadow: isBulkFood
+                                  ? [
+                                      BoxShadow(
+                                        color: Colors.purple.withOpacity(0.3),
+                                        blurRadius: 6,
+                                        offset: const Offset(0, 2),
+                                        spreadRadius: 0,
+                                      ),
+                                    ]
+                                  : [],
+                            ),
+                            child: Stack(
+                              children: [
+                                AnimatedPositioned(
+                                  duration: const Duration(milliseconds: 200),
+                                  curve: Curves.easeInOut,
+                                  left: isBulkFood ? 20 : 2,
+                                  top: 2,
+                                  child: Container(
+                                    width: 24,
+                                    height: 24,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: Colors.white,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.15),
+                                          blurRadius: 3,
+                                          offset: const Offset(0, 1),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    if (isBulkFood) ...[
-                      const SizedBox(height: 16),
+                  ),
+                ),
+              ),
+              // Bulk Food Form Fields (when enabled)
+              if (isBulkFood)
+                _buildCard(
+                _buildCard(
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -2839,10 +3461,244 @@ class _AddListingScreenState extends State<AddListingScreen> {
                         ),
                       ),
                     ],
-                  ],
+                  ),
                 ),
               ),
             ],
+
+            // Multi-Item Mode - Premium Feature Card
+            AnimatedBuilder(
+              animation: _multiItemCardScaleAnimation,
+              builder: (context, child) {
+                return Transform.scale(
+                  scale: _multiItemCardScaleAnimation.value,
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 20),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: isMultiItemMode
+                            ? [
+                                AppTheme.primaryColor.withOpacity(0.15),
+                                AppTheme.primaryColor.withOpacity(0.08),
+                                Colors.grey.shade50,
+                              ]
+                            : [
+                                Colors.grey.shade50,
+                                Colors.white,
+                              ],
+                      ),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(
+                        color: isMultiItemMode
+                            ? AppTheme.primaryColor.withOpacity(0.3)
+                            : Colors.grey.shade200,
+                        width: isMultiItemMode ? 1.5 : 1,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: isMultiItemMode
+                              ? AppTheme.primaryColor.withOpacity(0.2 * _multiItemCardGlowAnimation.value)
+                              : Colors.black.withOpacity(0.04),
+                          blurRadius: isMultiItemMode ? 16 : 12,
+                          offset: const Offset(0, 4),
+                          spreadRadius: isMultiItemMode ? 2 : 0,
+                        ),
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.02),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () {
+                          setState(() {
+                            isMultiItemMode = !isMultiItemMode;
+                            if (!isMultiItemMode) {
+                              pendingItems.clear();
+                              _multiItemCardAnimationController.reverse();
+                            } else {
+                              _multiItemCardAnimationController.forward();
+                              // Show hint after a short delay
+                              Future.delayed(const Duration(milliseconds: 500), () {
+                                if (mounted && isMultiItemMode) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: const Text("You can now add multiple items faster"),
+                                      backgroundColor: AppTheme.primaryColor,
+                                      duration: const Duration(seconds: 2),
+                                      behavior: SnackBarBehavior.floating,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                    ),
+                                  );
+                                }
+                              });
+                            }
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(18),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          child: Row(
+                            children: [
+                              // Feature Icon - Smaller and refined
+                              Container(
+                                width: 44,
+                                height: 44,
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: isMultiItemMode
+                                        ? [
+                                            AppTheme.primaryColor,
+                                            AppTheme.primaryColor.withOpacity(0.85),
+                                          ]
+                                        : [
+                                            Colors.grey.shade300,
+                                            Colors.grey.shade200,
+                                          ],
+                                  ),
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: isMultiItemMode
+                                          ? AppTheme.primaryColor.withOpacity(0.25)
+                                          : Colors.grey.withOpacity(0.15),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
+                                      spreadRadius: 0,
+                                    ),
+                                  ],
+                                ),
+                                child: Icon(
+                                  Icons.inventory_2_rounded,
+                                  color: Colors.white,
+                                  size: 22,
+                                ),
+                              ),
+                              const SizedBox(width: 14),
+                              // Text Content - Compact and refined
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Row(
+                                      crossAxisAlignment: CrossAxisAlignment.center,
+                                      children: [
+                                        Flexible(
+                                          child: Text(
+                                            'Multiple Items Mode',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 15,
+                                              color: Colors.grey.shade900,
+                                              letterSpacing: -0.2,
+                                              height: 1.2,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        // Recommended Badge - Smaller and subtle
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.green.shade50,
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: Text(
+                                            'Recommended',
+                                            style: TextStyle(
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.w600,
+                                              color: Colors.green.shade700,
+                                              letterSpacing: 0.1,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 5),
+                                    Text(
+                                      'Add and manage multiple products in one go',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.grey.shade600,
+                                        fontWeight: FontWeight.w400,
+                                        height: 1.3,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              // Premium Toggle - Smaller and refined
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                width: 48,
+                                height: 28,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(14),
+                                  color: isMultiItemMode
+                                      ? AppTheme.primaryColor
+                                      : Colors.grey.shade300,
+                                  boxShadow: isMultiItemMode
+                                      ? [
+                                          BoxShadow(
+                                            color: AppTheme.primaryColor.withOpacity(0.3),
+                                            blurRadius: 6,
+                                            offset: const Offset(0, 2),
+                                            spreadRadius: 0,
+                                          ),
+                                        ]
+                                      : [],
+                                ),
+                                child: Stack(
+                                  children: [
+                                    AnimatedPositioned(
+                                      duration: const Duration(milliseconds: 200),
+                                      curve: Curves.easeInOut,
+                                      left: isMultiItemMode ? 20 : 2,
+                                      top: 2,
+                                      child: Container(
+                                        width: 24,
+                                        height: 24,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: Colors.white,
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black.withOpacity(0.15),
+                                              blurRadius: 3,
+                                              offset: const Offset(0, 1),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 16),
 
             // Live Kitchen Option (only for Live Kitchen type)
             if (selectedType == SellType.liveKitchen) ...[
@@ -4473,7 +5329,407 @@ class _AddListingScreenState extends State<AddListingScreen> {
           ],
         ),
       ),
+      ),
     );
+  }
+
+  Widget _buildSavedListCard(ItemList list) {
+    final isLastUsed = list.lastUsedAt != null && 
+        savedItemLists.where((l) => l.lastUsedAt != null && l.lastUsedAt!.isAfter(list.lastUsedAt!)).isEmpty;
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.primaryColor.withOpacity(0.08),
+            AppTheme.primaryColor.withOpacity(0.03),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppTheme.primaryColor.withOpacity(0.2),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            _loadItemList(list);
+          },
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [AppTheme.primaryColor, AppTheme.primaryColor.withOpacity(0.8)],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.primaryColor.withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.inventory_2_rounded, color: Colors.white, size: 22),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              list.name,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.black87,
+                              ),
+                            ),
+                          ),
+                          if (isLastUsed)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade50,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                'Last Used',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.blue.shade700,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${list.itemCount} ${list.itemCount == 1 ? 'item' : 'items'} • Updated ${_formatDate(list.updatedAt)}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    size: 16,
+                    color: AppTheme.primaryColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+  
+  Future<void> _promptSaveItemList(int itemCount) async {
+    // Store items before clearing
+    final itemsToSave = List<PendingListingItem>.from(pendingItems);
+    
+    if (itemsToSave.isEmpty) return; // Safety check
+    
+    // If editing an existing list, show options to update or create new
+    if (widget.initialItemList != null) {
+      final result = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Save Changes'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('What would you like to do?'),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: const Icon(Icons.update, color: Colors.blue),
+                title: const Text('Update Existing List'),
+                subtitle: Text('Update "${widget.initialItemList!.name}"'),
+                onTap: () => Navigator.pop(context, 'update'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.add, color: Colors.green),
+                title: const Text('Create New List'),
+                subtitle: const Text('Save as a new list'),
+                onTap: () => Navigator.pop(context, 'new'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'skip'),
+              child: const Text('Skip'),
+            ),
+          ],
+        ),
+      );
+
+      if (result == 'update') {
+        // Update existing list
+        await _updateExistingList(itemsToSave);
+        return;
+      } else if (result == 'new') {
+        // Show dialog to create new list
+        await _createNewListDialog(itemsToSave);
+        return;
+      } else {
+        // Skip - don't save
+        return;
+      }
+    }
+    
+    // Normal flow: create new list
+    await _createNewListDialog(itemsToSave);
+  }
+
+  Future<void> _updateExistingList(List<PendingListingItem> itemsToSave) async {
+    if (widget.initialItemList == null) return;
+    
+    try {
+      final currentSellerId = sellerId;
+      if (currentSellerId == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please log in to update lists'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      await ItemListService.updateItemList(
+        sellerId: currentSellerId,
+        listId: widget.initialItemList!.id,
+        items: itemsToSave,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('"${widget.initialItemList!.name}" updated successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to update list: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _createNewListDialog(List<PendingListingItem> itemsToSave) async {
+    final controller = TextEditingController();
+    bool isLoading = false;
+    
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(Icons.save_rounded, color: AppTheme.primaryColor, size: 24),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Save as Item List?',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+          content: isLoading
+              ? const SizedBox(
+                  height: 100,
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Save these ${itemsToSave.length} items as a reusable list for faster posting next time.',
+                      style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: controller,
+                      enabled: !isLoading,
+                      decoration: InputDecoration(
+                        labelText: 'List Name',
+                        hintText: 'e.g., Daily Grocery List, Breakfast Menu',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        prefixIcon: const Icon(Icons.label_outline),
+                      ),
+                      autofocus: true,
+                    ),
+                  ],
+                ),
+          actions: isLoading
+              ? []
+              : [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('Skip'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () async {
+                      final listName = controller.text.trim();
+                      if (listName.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Please enter a list name'),
+                            backgroundColor: Colors.orange,
+                          ),
+                        );
+                        return;
+                      }
+                      
+                      setDialogState(() {
+                        isLoading = true;
+                      });
+                      
+                      try {
+                        final currentSellerId = sellerId;
+                        if (currentSellerId == null) {
+                          if (context.mounted) {
+                            setDialogState(() {
+                              isLoading = false;
+                            });
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Please log in to save lists'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                          return;
+                        }
+                        
+                        print('Starting save operation for list: $listName');
+                        await ItemListService.saveItemList(
+                          sellerId: currentSellerId,
+                          name: listName,
+                          items: itemsToSave,
+                        ).timeout(
+                          const Duration(seconds: 10),
+                          onTimeout: () {
+                            throw Exception('Save operation timed out. Please check your internet connection.');
+                          },
+                        );
+                        
+                        print('Save completed successfully');
+                        if (context.mounted) {
+                          Navigator.pop(context, true);
+                        }
+                      } catch (e) {
+                        print('Error in save operation: $e');
+                        String errorMessage = 'Failed to save list';
+                        
+                        // Provide more helpful error messages
+                        final errorStr = e.toString().toLowerCase();
+                        if (errorStr.contains('timeout')) {
+                          errorMessage = 'Save timed out. Please:\n1. Check your internet connection\n2. Ensure Firestore rules are published\n3. Wait 1-2 minutes after publishing rules';
+                        } else if (errorStr.contains('permission') || errorStr.contains('denied')) {
+                          errorMessage = 'Permission denied. Please publish Firestore rules for itemLists subcollection.';
+                        } else if (errorStr.contains('unavailable') || errorStr.contains('offline')) {
+                          errorMessage = 'Firestore unavailable. Please check your internet connection.';
+                        } else {
+                          errorMessage = 'Failed to save: ${e.toString()}';
+                        }
+                        
+                        if (context.mounted) {
+                          setDialogState(() {
+                            isLoading = false;
+                          });
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(errorMessage),
+                              backgroundColor: Colors.red,
+                              duration: const Duration(seconds: 5),
+                            ),
+                          );
+                        }
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primaryColor,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text('Save List'),
+                  ),
+                ],
+        ),
+      ),
+    );
+
+    if (confirmed == true) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('"${controller.text.trim()}" saved successfully!'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+        _loadSavedItemLists();
+      }
+    }
+    
+    controller.dispose();
   }
 
   String _formatDate(DateTime date) {
@@ -4642,6 +5898,11 @@ class _AddListingScreenState extends State<AddListingScreen> {
         // Success message will be shown after navigation delay
       }
 
+      // Prompt to save as item list (only if multiple items were posted)
+      if (itemsCount > 1 && !enableScheduling) {
+        await _promptSaveItemList(itemsCount);
+      }
+
       setState(() {
         pendingItems.clear();
         enableScheduling = false;
@@ -4735,4 +5996,243 @@ class _AddListingScreenState extends State<AddListingScreen> {
     }
   }
 
+  // Premium Text Field Builder
+  Widget _buildPremiumTextField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    required IconData icon,
+    required Color iconColor,
+    TextInputType? keyboardType,
+    int maxLines = 1,
+    Widget? suffixIcon,
+    String? Function(String?)? validator,
+  }) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboardType,
+      maxLines: maxLines,
+      style: TextStyle(
+        fontSize: 15,
+        fontWeight: FontWeight.w500,
+        color: Colors.grey.shade900,
+      ),
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        floatingLabelStyle: TextStyle(
+          color: iconColor,
+          fontWeight: FontWeight.w600,
+        ),
+        prefixIcon: Container(
+          margin: const EdgeInsets.all(10),
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: iconColor.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(
+            icon,
+            color: iconColor,
+            size: 20,
+          ),
+        ),
+        suffixIcon: suffixIcon,
+        filled: true,
+        fillColor: Colors.grey.shade50,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.grey.shade300, width: 1.5),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.grey.shade300, width: 1.5),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: iconColor, width: 2.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.red.shade400, width: 1.5),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.red.shade400, width: 2.5),
+        ),
+        labelStyle: TextStyle(
+          color: Colors.grey.shade600,
+          fontSize: 15,
+          fontWeight: FontWeight.w500,
+        ),
+        hintStyle: TextStyle(
+          color: Colors.grey.shade400,
+          fontSize: 14,
+        ),
+      ),
+      validator: validator,
+    );
+  }
+
+  // Premium Dropdown Builder
+  Widget _buildPremiumDropdown<T>({
+    required T? value,
+    required String label,
+    required String hint,
+    required IconData icon,
+    required Color iconColor,
+    required List<DropdownMenuItem<T>> items,
+    required void Function(T?) onChanged,
+    String? Function(T?)? validator,
+  }) {
+    return DropdownButtonFormField<T>(
+      value: value,
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        floatingLabelStyle: TextStyle(
+          color: iconColor,
+          fontWeight: FontWeight.w600,
+        ),
+        prefixIcon: Container(
+          margin: const EdgeInsets.all(10),
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: iconColor.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(
+            icon,
+            color: iconColor,
+            size: 20,
+          ),
+        ),
+        filled: true,
+        fillColor: Colors.grey.shade50,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.grey.shade300, width: 1.5),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.grey.shade300, width: 1.5),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: iconColor, width: 2.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.red.shade400, width: 1.5),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.red.shade400, width: 2.5),
+        ),
+        labelStyle: TextStyle(
+          color: Colors.grey.shade600,
+          fontSize: 15,
+          fontWeight: FontWeight.w500,
+        ),
+        hintStyle: TextStyle(
+          color: Colors.grey.shade400,
+          fontSize: 14,
+        ),
+      ),
+      items: items,
+      onChanged: onChanged,
+      validator: validator,
+      style: TextStyle(
+        fontSize: 15,
+        fontWeight: FontWeight.w500,
+        color: Colors.grey.shade900,
+      ),
+    );
+  }
+
+  // Document Upload Card
+  Widget _buildDocumentUploadCard() {
+    return InkWell(
+      onTap: _pickFssaiLicense,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.orange.shade50,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: Colors.orange.shade200,
+            width: 1.5,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade100,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                Icons.attach_file_rounded,
+                color: Colors.orange.shade700,
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    fssaiLicenseFile == null
+                        ? "Attach FSSAI License Document"
+                        : fssaiLicenseFile!.name,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: fssaiLicenseFile == null
+                          ? FontWeight.w500
+                          : FontWeight.w600,
+                      color: fssaiLicenseFile == null
+                          ? Colors.grey.shade700
+                          : Colors.green.shade700,
+                    ),
+                  ),
+                  if (fssaiLicenseFile != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        "${(fssaiLicenseFile!.size / 1024).toStringAsFixed(2)} KB",
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            if (fssaiLicenseFile != null)
+              IconButton(
+                icon: Icon(Icons.close_rounded, color: Colors.red.shade400, size: 20),
+                onPressed: () {
+                  setState(() {
+                    fssaiLicenseFile = null;
+                  });
+                },
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              )
+            else
+              Icon(
+                Icons.chevron_right_rounded,
+                color: Colors.grey.shade400,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 }

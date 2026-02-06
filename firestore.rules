@@ -42,6 +42,30 @@ service cloud.firestore {
         allow update: if request.auth != null && request.auth.uid == userId;
         allow delete: if request.auth != null && request.auth.uid == userId;
       }
+      
+      // Buyer Addresses subcollection
+      match /buyerAddresses/{addressId} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // Item Lists subcollection (for sellers)
+      match /itemLists/{listId} {
+        // Allow read if authenticated and userId matches
+        allow read: if request.auth != null && request.auth.uid == userId;
+        // Allow create if authenticated, userId matches, and sellerId in data matches auth.uid
+        allow create: if request.auth != null && 
+          request.auth.uid == userId &&
+          request.resource.data.sellerId == request.auth.uid;
+        // Allow update if authenticated, userId matches, and sellerId matches
+        allow update: if request.auth != null && 
+          request.auth.uid == userId &&
+          resource.data.sellerId == request.auth.uid;
+        // Allow delete if authenticated, userId matches, and sellerId matches
+        allow delete: if request.auth != null && 
+          request.auth.uid == userId &&
+          resource.data.sellerId == request.auth.uid;
+      }
     }
     
     // Default: deny all other access

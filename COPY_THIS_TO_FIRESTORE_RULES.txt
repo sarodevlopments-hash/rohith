@@ -32,6 +32,23 @@ service cloud.firestore {
     match /userProfiles/{userId} {
       allow read: if request.auth != null && request.auth.uid == userId;
       allow write: if request.auth != null && request.auth.uid == userId;
+      
+      // Buyer Addresses subcollection
+      match /buyerAddresses/{addressId} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // Item Lists subcollection (for sellers)
+      match /itemLists/{listId} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow create: if request.auth != null && request.auth.uid == userId &&
+          request.resource.data.sellerId == request.auth.uid;
+        allow update: if request.auth != null && request.auth.uid == userId &&
+          resource.data.sellerId == request.auth.uid;
+        allow delete: if request.auth != null && request.auth.uid == userId &&
+          resource.data.sellerId == request.auth.uid;
+      }
     }
     
     // Default: deny all other access
