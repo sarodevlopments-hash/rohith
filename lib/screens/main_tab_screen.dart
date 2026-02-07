@@ -159,8 +159,9 @@ class _MainTabScreenState extends State<MainTabScreen> {
   void initState() {
     super.initState();
     // Keep seller/buyer SnackBars just above the custom bottom navigation bar,
-    // with a minimal, professional-looking gap.
-    NotificationService.pushBottomInset(32);
+    // with minimal spacing (8-12px gap).
+    // Bottom inset: 15px
+    NotificationService.pushBottomInset(15);
     // Start Firestore -> Hive sync for orders so buyer/seller status updates work in real time.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       OrderSyncService.start();
@@ -509,11 +510,9 @@ class _MainTabScreenState extends State<MainTabScreen> {
   }
 
   Widget _buildSellerDashboardTab(String sellerId) {
-    // Wrap with bottom padding to avoid overlap with bottom nav
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 120), // Space for bottom nav
-      child: SellerDashboardScreen(sellerId: sellerId),
-    );
+    // No wrapper padding - match buyer screens structure
+    // Internal padding in SellerDashboardScreen handles spacing
+    return SellerDashboardScreen(sellerId: sellerId);
   }
 
   List<Widget> _buildBuyerTabs() {
