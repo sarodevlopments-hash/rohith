@@ -126,10 +126,11 @@ class NotificationService {
       debugPrint('[NotificationService] Got ScaffoldMessenger, showing SnackBar');
       final mediaQuery = MediaQuery.of(scaffoldContext);
       final bottomSafe = mediaQuery.padding.bottom;
-      // Slightly overlap into the Buyer/Seller segmented control zone for a tighter, more "system bar"
-      // appearance while still respecting safe area. This reduces the perceived empty gap.
-      final effectiveInset = (_currentBottomInset - 8).clamp(0.0, double.infinity);
-      final bottomMargin = bottomSafe + effectiveInset;
+      // Position notification exactly like "Added to cart" SnackBar
+      // "Added to cart" has NO custom margin - uses default SnackBar positioning
+      // Default floating SnackBar appears ~16px from bottom nav bar
+      // _currentBottomInset = 70px (nav height + small gap)
+      final bottomMargin = bottomSafe + _currentBottomInset;
       final safeCount = pendingCount < 1 ? 1 : pendingCount;
       final countLabel = safeCount > 10 ? '10+' : '$safeCount';
       final showCount = safeCount > 1;
@@ -137,18 +138,18 @@ class NotificationService {
           showCount ? '$countLabel orders pending approval' : null;
 
       // Don't clear existing snackbars - just show the new one (it will replace if needed)
+      debugPrint('[NotificationService] Bottom margin calculated: $bottomMargin (bottomSafe: $bottomSafe, inset: $_currentBottomInset)');
       messenger.showSnackBar(
         SnackBar(
           elevation: 0,
           backgroundColor: Colors.transparent,
-          behavior: SnackBarBehavior.floating,
+          behavior: SnackBarBehavior.floating, // Floating behavior positions from bottom
           padding: EdgeInsets.zero,
-          margin: EdgeInsets.fromLTRB(
-            16,
-            0,
-            16,
-            bottomMargin,
-          ), // Lift above bottom nav / sticky actions with smooth gap
+          margin: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            bottom: bottomMargin.clamp(10.0, 35.0), // Clamp to 10-35px range
+          ), // Position with minimal gap (8-12px) above Buyer/Seller toggle
           // Persist until user takes action - seller must acknowledge new orders
           duration: const Duration(days: 1), // Very long duration - dismisses only on user action
           content: _NewOrderNotificationCard(

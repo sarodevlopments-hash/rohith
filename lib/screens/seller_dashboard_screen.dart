@@ -93,7 +93,7 @@ Widget build(BuildContext context) {
               final chartData = _getChartData(myOrders, _selectedTimeRange, _customStartDate, _customEndDate);
 
               return SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 16), // Match buyer screens (16px bottom padding)
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -157,13 +157,13 @@ Widget build(BuildContext context) {
 
                     // Quick Actions
                     _buildQuickActions(),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
                     _buildItemManagementSection(),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 12),
 
                     // Item Insights
                     _buildItemInsightsSection(myListings, myOrders),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 12),
 
                     // Reviews Section
                     _buildReviewsSection(),
