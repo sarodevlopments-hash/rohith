@@ -35,6 +35,8 @@ import '../theme/app_theme.dart';
 import '../models/item_list.dart';
 import '../services/item_list_service.dart';
 import 'manage_item_lists_screen.dart';
+import '../services/user_firestore_service.dart';
+import '../models/app_user.dart';
 
 class AddListingScreen extends StatefulWidget {
   final ValueNotifier<int>? promptCounter;
@@ -510,31 +512,106 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
       }
       return;
     }
-    final hasProfile = await SellerProfileService.hasProfile(currentSellerId);
-    if (!hasProfile) {
-      setState(() {
-        isFirstTimeSeller = true;
-        showSellerProfileForm = true;
-      });
-    } else {
-      final profile = await SellerProfileService.getProfile(currentSellerId);
-      setState(() {
-        sellerProfile = profile;
-        if (profile != null) {
-          sellerNameController.text = profile.sellerName;
-          sellerPhoneController.text = profile.phoneNumber;
-          sellerPickupLocationController.text = profile.pickupLocation;
-          // Only load FSSAI if it was for cooked food
-          if (profile.defaultFoodType == SellType.cookedFood) {
-            sellerFssaiController.text = profile.fssaiLicense;
-          }
-          selectedCookedFoodSource = profile.cookedFoodSource;
-          if (profile.defaultFoodType != null) {
-            selectedType = profile.defaultFoodType!;
-          }
-        }
-      });
+
+    print('🔍 Loading seller profile for: $currentSellerId');
+
+    // Load user profile from Firestore to get name and phone
+    AppUser? userProfile;
+    try {
+      userProfile = await UserFirestoreService.getUser(currentSellerId);
+      print('✅ User profile loaded: ${userProfile?.fullName ?? 'null'}');
+    } catch (e) {
+      print('⚠️ Error loading user profile: $e');
     }
+
+    // Load saved seller profile first (location, FSSAI, name, phone, etc.)
+    print('🔍 Checking if seller profile exists...');
+    final hasSellerProfile = await SellerProfileService.hasProfile(currentSellerId);
+    print('📦 Has seller profile: $hasSellerProfile');
+    
+    SellerProfile? savedProfile;
+    
+    if (hasSellerProfile) {
+      savedProfile = await SellerProfileService.getProfile(currentSellerId);
+      print('📦 Loaded seller profile: ${savedProfile != null}');
+      
+      if (savedProfile != null) {
+        print('📦 Profile data:');
+        print('   - Name: "${savedProfile.sellerName}"');
+        print('   - Phone: "${savedProfile.phoneNumber}"');
+        print('   - Location: "${savedProfile.pickupLocation}"');
+        print('   - FSSAI: "${savedProfile.fssaiLicense}"');
+        print('   - Food Source: ${savedProfile.cookedFoodSource}');
+        print('   - Type: ${savedProfile.defaultFoodType}');
+        
+        // Load saved name (seller profile takes precedence) - ALWAYS load if exists
+        sellerNameController.text = savedProfile.sellerName;
+        print('✅ Loaded name: "${savedProfile.sellerName}"');
+        
+        // Load saved phone (seller profile takes precedence) - ALWAYS load if exists
+        sellerPhoneController.text = savedProfile.phoneNumber;
+        print('✅ Loaded phone: "${savedProfile.phoneNumber}"');
+        
+        // Load saved location - ALWAYS load if exists
+        sellerPickupLocationController.text = savedProfile.pickupLocation;
+        print('✅ Loaded location: "${savedProfile.pickupLocation}"');
+        
+        // Load saved FSSAI - ALWAYS load if exists
+        sellerFssaiController.text = savedProfile.fssaiLicense;
+        print('✅ Loaded FSSAI: "${savedProfile.fssaiLicense}"');
+        
+        // Load saved food source and default type
+        selectedCookedFoodSource = savedProfile.cookedFoodSource;
+        print('✅ Loaded food source: ${savedProfile.cookedFoodSource}');
+        
+        if (savedProfile.defaultFoodType != null) {
+          selectedType = savedProfile.defaultFoodType!;
+          print('✅ Loaded default type: ${savedProfile.defaultFoodType}');
+        }
+      }
+    }
+    
+    // Fallback to user profile for name and phone if seller profile doesn't have them
+    if (sellerNameController.text.isEmpty || sellerPhoneController.text.isEmpty) {
+      final authUser = FirebaseAuth.instance.currentUser;
+      final userName = userProfile?.fullName ?? authUser?.displayName ?? '';
+      final userPhone = userProfile?.phoneNumber ?? authUser?.phoneNumber ?? '';
+
+      print('📝 Fallback to user profile - name: $userName, phone: $userPhone');
+
+      // Pre-populate seller name from user profile if not set
+      if (sellerNameController.text.isEmpty && userName.isNotEmpty) {
+        sellerNameController.text = userName;
+        print('✅ Loaded name from user profile: $userName');
+      }
+      
+      // Pre-populate phone from user profile if not set
+      if (sellerPhoneController.text.isEmpty && userPhone.isNotEmpty) {
+        sellerPhoneController.text = userPhone;
+        print('✅ Loaded phone from user profile: $userPhone');
+      }
+    }
+
+    // Determine if we need to show the form
+    // Show form only if location or FSSAI (for cooked food) is missing
+    final currentLocation = sellerPickupLocationController.text.trim();
+    final currentFssai = sellerFssaiController.text.trim();
+    final needsLocation = currentLocation.isEmpty;
+    final needsFssai = selectedType == SellType.cookedFood && currentFssai.isEmpty;
+    final shouldShowForm = needsLocation || needsFssai;
+
+    print('📋 Form display check:');
+    print('   - Location empty: $needsLocation (value: "$currentLocation")');
+    print('   - FSSAI empty: $needsFssai (value: "$currentFssai", type: $selectedType)');
+    print('   - Should show form: $shouldShowForm');
+
+    setState(() {
+      sellerProfile = savedProfile;
+      isFirstTimeSeller = !hasSellerProfile || shouldShowForm;
+      showSellerProfileForm = shouldShowForm;
+    });
+    
+    print('✅ Profile loading complete. Form will ${shouldShowForm ? 'SHOW' : 'HIDE'}');
   }
 
   void _applySelectedType(SellType v) {
@@ -542,8 +619,12 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
       selectedType = v;
       if (selectedType != SellType.cookedFood && selectedType != SellType.liveKitchen) {
         selectedCookedFoodSource = null;
-        sellerFssaiController.clear();
+        // Don't clear FSSAI - keep it saved for when user switches back
         fssaiLicenseFile = null;
+      }
+      // If switching to cooked food and FSSAI is missing, show the form
+      if (selectedType == SellType.cookedFood && sellerFssaiController.text.trim().isEmpty) {
+        showSellerProfileForm = true;
       }
       if (selectedType == SellType.vegetables || selectedType == SellType.clothingAndApparel || selectedType == SellType.groceries) {
         if (selectedType != SellType.groceries) {
@@ -1525,7 +1606,26 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
       pickupLocation: sellerPickupLocationController.text.trim(),
     );
 
-    await SellerProfileService.saveProfile(profile);
+    print('💾 Saving seller profile...');
+    print('   - Name: ${profile.sellerName}');
+    print('   - Phone: ${profile.phoneNumber}');
+    print('   - Location: ${profile.pickupLocation}');
+    print('   - FSSAI: ${profile.fssaiLicense}');
+    print('   - Food Source: ${profile.cookedFoodSource}');
+    print('   - Type: ${profile.defaultFoodType}');
+    
+    try {
+      await SellerProfileService.saveProfile(profile);
+      print('✅ Seller profile saved successfully');
+    } catch (e) {
+      print('❌ Error saving seller profile: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error saving profile: $e')),
+        );
+      }
+      return;
+    }
     
     setState(() {
       sellerProfile = profile;
@@ -5325,7 +5425,7 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                 ),
               ),
             ],
-            const SizedBox(height: 32),
+            const SizedBox(height: 16), // Consistent 16px bottom padding
           ],
         ),
       ),
