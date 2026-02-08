@@ -495,17 +495,15 @@ class _MainTabScreenState extends State<MainTabScreen> {
   }
 
   Widget _buildSellerAddListingTab() {
-    // Wrap with bottom padding to avoid overlap with bottom nav
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 120), // Space for bottom nav
-      child: AddListingScreen(
-        promptCounter: _sellPromptCounter,
-        onBackToDashboard: () {
-          setState(() {
-            _currentIndex = 0; // Switch to Dashboard tab
-          });
-        },
-      ),
+    // No wrapper padding - match buyer screens structure
+    // Internal padding in AddListingScreen handles spacing
+    return AddListingScreen(
+      promptCounter: _sellPromptCounter,
+      onBackToDashboard: () {
+        setState(() {
+          _currentIndex = 0; // Switch to Dashboard tab
+        });
+      },
     );
   }
 
