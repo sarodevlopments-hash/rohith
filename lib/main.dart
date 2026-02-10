@@ -23,6 +23,7 @@ import 'models/rating.dart';
 import 'models/app_user.dart';
 import 'models/buyer_address.dart';
 import 'auth/auth_gate.dart';
+import 'theme/app_theme.dart';
 // void main() async {
 //   WidgetsFlutterBinding.ensureInitialized();
 
@@ -194,16 +195,16 @@ class FoodApp extends StatelessWidget {
       title: 'Food App',
       navigatorKey: navigatorKey,
       theme: ThemeData(
-        primarySwatch: Colors.blue,
-        primaryColor: const Color(0xFF4A90E2),
-        scaffoldBackgroundColor: const Color(0xFFF8F9FA),
-        cardColor: Colors.white,
+        primaryColor: AppTheme.primaryColor,
+        scaffoldBackgroundColor: AppTheme.backgroundColor,
+        cardColor: AppTheme.cardColor,
         fontFamily: 'Roboto',
-        appBarTheme: const AppBarTheme(
+        appBarTheme: AppBarTheme(
           elevation: 0,
-          backgroundColor: Colors.white,
-          foregroundColor: Color(0xFF2C3E50),
+          backgroundColor: AppTheme.cardColor,
+          foregroundColor: AppTheme.darkText,
           centerTitle: true,
+          iconTheme: IconThemeData(color: AppTheme.darkText),
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
@@ -212,22 +213,24 @@ class FoodApp extends StatelessWidget {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(14),
             ),
+            backgroundColor: AppTheme.primaryColor,
+            foregroundColor: Colors.white,
           ),
         ),
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
-          fillColor: const Color(0xFFF8F9FA),
+          fillColor: AppTheme.backgroundColor,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
-            borderSide: const BorderSide(color: Color(0xFFE8ECEF), width: 1.5),
+            borderSide: BorderSide(color: AppTheme.borderColor, width: 1.5),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
-            borderSide: const BorderSide(color: Color(0xFFE8ECEF), width: 1.5),
+            borderSide: BorderSide(color: AppTheme.borderColor, width: 1.5),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
-            borderSide: const BorderSide(color: Color(0xFF4A90E2), width: 2.5),
+            borderSide: BorderSide(color: AppTheme.primaryColor, width: 2.5),
           ),
           contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
         ),

@@ -17,6 +17,7 @@ import 'add_listing_screen.dart';
 import 'seller_dashboard_screen.dart';
 import 'location_selection_screen.dart';
 import 'buyer_profile_screen.dart';
+import '../theme/app_theme.dart';
 
 class MainTabScreen extends StatefulWidget {
   const MainTabScreen({super.key});
@@ -86,6 +87,7 @@ class _MainTabScreenState extends State<MainTabScreen> {
       valueListenable: Hive.box('cartBox').listenable(),
       builder: (context, Box box, _) {
         final count = box.length;
+        // Cart is always inactive in bottom nav (it navigates to separate screen)
         return Expanded(
           child: InkWell(
             onTap: () {
@@ -96,55 +98,64 @@ class _MainTabScreenState extends State<MainTabScreen> {
             },
             borderRadius: BorderRadius.circular(12),
             child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Stack(
-                clipBehavior: Clip.none,
-                alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  Stack(
+                    clipBehavior: Clip.none,
+                    alignment: Alignment.center,
                     children: [
-                      Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          Icon(Icons.shopping_cart_outlined, color: Colors.grey.shade700, size: 24),
-                          if (count > 0)
-                            Positioned(
-                              right: -6,
-                              top: -6,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                                constraints: const BoxConstraints(
-                                  minWidth: 16,
-                                  minHeight: 16,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.red,
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Text(
-                                  '$count',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Cart',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade700,
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.transparent,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          Icons.shopping_cart_outlined,
+                          color: AppTheme.disabledText,
+                          size: 22,
                         ),
                       ),
+                      if (count > 0)
+                        Positioned(
+                          right: -2,
+                          top: -2,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                            constraints: const BoxConstraints(
+                              minWidth: 16,
+                              minHeight: 16,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppTheme.errorColor,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              '$count',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
                     ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Cart',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: AppTheme.disabledText,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
                 ],
               ),
@@ -209,7 +220,7 @@ class _MainTabScreenState extends State<MainTabScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade50,
+      backgroundColor: AppTheme.backgroundColor,
       appBar: _isSellerMode ? null : _buildAppBar(), // Only show AppBar in buyer mode
       body: IndexedStack(
         index: _currentIndex,
@@ -245,13 +256,20 @@ class _MainTabScreenState extends State<MainTabScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-                // Mode Switch - More Prominent
+                // Mode Switch - Premium Gradient Design
                 Container(
                   padding: const EdgeInsets.all(2),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade200,
+                    color: AppTheme.backgroundColor,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey.shade300, width: 1),
+                    border: Border.all(color: AppTheme.borderColor, width: 1),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.04),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
                   child: Row(
                     children: [
@@ -266,14 +284,16 @@ class _MainTabScreenState extends State<MainTabScreen> {
                           child: Container(
                             padding: const EdgeInsets.symmetric(vertical: 8),
                             decoration: BoxDecoration(
-                              color: !_isSellerMode ? Colors.orange : Colors.transparent,
-                              borderRadius: BorderRadius.circular(8),
+                              gradient: !_isSellerMode ? AppTheme.primaryGradient : null,
+                              color: _isSellerMode ? Colors.transparent : null,
+                              borderRadius: BorderRadius.circular(10),
                               boxShadow: !_isSellerMode
                                   ? [
                                       BoxShadow(
-                                        color: Colors.orange.withOpacity(0.3),
-                                        blurRadius: 8,
-                                        offset: const Offset(0, 2),
+                                        color: AppTheme.teal.withOpacity(0.25),
+                                        blurRadius: 12,
+                                        offset: const Offset(0, 4),
+                                        spreadRadius: -2,
                                       ),
                                     ]
                                   : null,
@@ -282,17 +302,17 @@ class _MainTabScreenState extends State<MainTabScreen> {
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Icon(
-                                  Icons.shopping_bag,
+                                  Icons.shopping_bag_rounded,
                                   size: 20,
-                                  color: !_isSellerMode ? Colors.white : Colors.grey.shade600,
+                                  color: !_isSellerMode ? Colors.white : AppTheme.disabledText,
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
                                   'Buyer',
                                   style: TextStyle(
                                     fontSize: 15,
-                                    fontWeight: !_isSellerMode ? FontWeight.bold : FontWeight.normal,
-                                    color: !_isSellerMode ? Colors.white : Colors.grey.shade600,
+                                    fontWeight: !_isSellerMode ? FontWeight.w700 : FontWeight.w500,
+                                    color: !_isSellerMode ? Colors.white : AppTheme.disabledText,
                                   ),
                                 ),
                               ],
@@ -311,14 +331,16 @@ class _MainTabScreenState extends State<MainTabScreen> {
                           child: Container(
                             padding: const EdgeInsets.symmetric(vertical: 8),
                             decoration: BoxDecoration(
-                              color: _isSellerMode ? Colors.orange : Colors.transparent,
-                              borderRadius: BorderRadius.circular(8),
+                              gradient: _isSellerMode ? AppTheme.primaryGradient : null,
+                              color: !_isSellerMode ? Colors.transparent : null,
+                              borderRadius: BorderRadius.circular(10),
                               boxShadow: _isSellerMode
                                   ? [
                                       BoxShadow(
-                                        color: Colors.orange.withOpacity(0.3),
-                                        blurRadius: 8,
-                                        offset: const Offset(0, 2),
+                                        color: AppTheme.teal.withOpacity(0.25),
+                                        blurRadius: 12,
+                                        offset: const Offset(0, 4),
+                                        spreadRadius: -2,
                                       ),
                                     ]
                                   : null,
@@ -327,17 +349,17 @@ class _MainTabScreenState extends State<MainTabScreen> {
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Icon(
-                                  Icons.store,
+                                  Icons.store_rounded,
                                   size: 20,
-                                  color: _isSellerMode ? Colors.white : Colors.grey.shade600,
+                                  color: _isSellerMode ? Colors.white : AppTheme.disabledText,
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
                                   'Seller',
                                   style: TextStyle(
                                     fontSize: 15,
-                                    fontWeight: _isSellerMode ? FontWeight.bold : FontWeight.normal,
-                                    color: _isSellerMode ? Colors.white : Colors.grey.shade600,
+                                    fontWeight: _isSellerMode ? FontWeight.w700 : FontWeight.w500,
+                                    color: _isSellerMode ? Colors.white : AppTheme.disabledText,
                                   ),
                                 ),
                               ],
@@ -462,12 +484,11 @@ class _MainTabScreenState extends State<MainTabScreen> {
         // Orders screen
         return AppBar(
           elevation: 0,
-          backgroundColor: Colors.white,
-          title: const Text(
+          backgroundColor: AppTheme.cardColor,
+          title: Text(
             'My Orders',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
+            style: AppTheme.heading3.copyWith(
+              fontWeight: FontWeight.w700,
             ),
           ),
           actions: [
@@ -565,6 +586,7 @@ class _MainTabScreenState extends State<MainTabScreen> {
     return Expanded(
       child: InkWell(
         onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 4),
           child: Column(
@@ -575,28 +597,23 @@ class _MainTabScreenState extends State<MainTabScreen> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  gradient: isActive
-                      ? const LinearGradient(
-                          colors: [Color(0xFF4A90E2), Color(0xFF7B68EE)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        )
-                      : null,
+                  gradient: isActive ? AppTheme.primaryGradient : null,
                   color: isActive ? null : Colors.transparent,
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(12),
                   boxShadow: isActive
                       ? [
                           BoxShadow(
-                            color: const Color(0xFF4A90E2).withOpacity(0.25),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
+                            color: AppTheme.teal.withOpacity(0.2),
+                            blurRadius: 10,
+                            offset: const Offset(0, 3),
+                            spreadRadius: -1,
                           ),
                         ]
                       : null,
                 ),
                 child: Icon(
                   icon,
-                  color: isActive ? Colors.white : Colors.grey.shade500,
+                  color: isActive ? Colors.white : AppTheme.disabledText,
                   size: 22,
                 ),
               ),
@@ -606,7 +623,7 @@ class _MainTabScreenState extends State<MainTabScreen> {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                  color: isActive ? const Color(0xFF4A90E2) : Colors.grey.shade600,
+                  color: isActive ? AppTheme.teal : AppTheme.disabledText,
                 ),
                 textAlign: TextAlign.center,
               ),

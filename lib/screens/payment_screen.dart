@@ -9,6 +9,7 @@ import '../screens/main_tab_screen.dart';
 import '../services/order_firestore_service.dart';
 import '../services/user_service.dart';
 import '../services/seller_profile_service.dart';
+import '../theme/app_theme.dart';
 
 class PaymentScreen extends StatefulWidget {
   final Listing listing;
@@ -216,10 +217,15 @@ class _PaymentScreenState extends State<PaymentScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
-        title: const Text('Payment'),
-        backgroundColor: Colors.orange,
+        title: Text(
+          'Payment',
+          style: AppTheme.heading3.copyWith(color: Colors.white),
+        ),
+        backgroundColor: AppTheme.primaryColor,
         foregroundColor: Colors.white,
+        elevation: 0,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
@@ -248,10 +254,20 @@ class _PaymentScreenState extends State<PaymentScreen> {
               child: ElevatedButton(
                 onPressed: _isProcessing ? null : _processPayment,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange,
+                  backgroundColor: AppTheme.primaryColor,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  elevation: 0,
+                ).copyWith(
+                  backgroundColor: MaterialStateProperty.resolveWith<Color>(
+                    (Set<MaterialState> states) {
+                      if (states.contains(MaterialState.disabled)) {
+                        return AppTheme.disabledText;
+                      }
+                      return AppTheme.primaryColor;
+                    },
                   ),
                 ),
                 child: _isProcessing
@@ -265,9 +281,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       )
                     : Text(
                         'Pay ₹${widget.totalPrice.toStringAsFixed(0)}',
-                        style: const TextStyle(
+                        style: AppTheme.heading3.copyWith(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
+                          color: Colors.white,
                         ),
                       ),
               ),
@@ -281,97 +298,113 @@ class _PaymentScreenState extends State<PaymentScreen> {
   Widget _buildOrderSummary() {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-          ),
-        ],
-      ),
+      decoration: AppTheme.getCardDecoration(elevated: true),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Order Summary',
-            style: TextStyle(
+            style: AppTheme.heading2.copyWith(
               fontSize: 20,
               fontWeight: FontWeight.bold,
+              color: AppTheme.darkText,
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                widget.listing.name,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              Expanded(
+                child: Text(
+                  widget.listing.name,
+                  style: AppTheme.heading3.copyWith(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.darkText,
+                  ),
+                ),
               ),
               Text(
                 '× ${widget.quantity}',
-                style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                style: AppTheme.bodyMedium.copyWith(
+                  fontSize: 14,
+                  color: AppTheme.lightText,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           if (widget.savedAmount > 0) ...[
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
                   'Original Price',
-                  style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                  style: AppTheme.bodyMedium.copyWith(
+                    fontSize: 14,
+                    color: AppTheme.lightText,
+                  ),
                 ),
                 Text(
                   '₹${widget.originalTotal.toStringAsFixed(0)}',
-                  style: TextStyle(
+                  style: AppTheme.bodyMedium.copyWith(
                     fontSize: 14,
                     decoration: TextDecoration.lineThrough,
-                    color: Colors.grey.shade600,
+                    color: AppTheme.disabledText,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
                   'You Save',
-                  style: TextStyle(fontSize: 14, color: Colors.green.shade700),
-                ),
-                Text(
-                  '₹${widget.savedAmount.toStringAsFixed(0)}',
-                  style: TextStyle(
+                  style: AppTheme.bodyMedium.copyWith(
                     fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.green.shade700,
+                    color: AppTheme.successColor,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    gradient: AppTheme.successGradient,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '₹${widget.savedAmount.toStringAsFixed(0)}',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
           ],
-          const Divider(),
-          const SizedBox(height: 8),
+          Divider(height: 1, color: AppTheme.borderColor.withOpacity(0.5)),
+          const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
+              Text(
                 'Total Amount',
-                style: TextStyle(
+                style: AppTheme.heading2.copyWith(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
+                  color: AppTheme.darkText,
                 ),
               ),
               Text(
                 '₹${widget.totalPrice.toStringAsFixed(0)}',
-                style: const TextStyle(
+                style: AppTheme.heading2.copyWith(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
-                  color: Colors.orange,
+                  color: AppTheme.primaryColor,
                 ),
               ),
             ],
@@ -385,53 +418,77 @@ class _PaymentScreenState extends State<PaymentScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Select Payment Method',
-          style: TextStyle(
+          style: AppTheme.heading2.copyWith(
             fontSize: 18,
             fontWeight: FontWeight.bold,
+            color: AppTheme.darkText,
           ),
         ),
-        const SizedBox(height: 12),
-        _buildPaymentOption('UPI', Icons.account_balance_wallet),
-        const SizedBox(height: 8),
-        _buildPaymentOption('Card', Icons.credit_card),
-        const SizedBox(height: 8),
-        _buildPaymentOption('Cash', Icons.money),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(child: _buildPaymentOption('UPI', Icons.account_balance_wallet_rounded)),
+            const SizedBox(width: 12),
+            Expanded(child: _buildPaymentOption('Card', Icons.credit_card_rounded)),
+            const SizedBox(width: 12),
+            Expanded(child: _buildPaymentOption('Cash', Icons.money_rounded)),
+          ],
+        ),
       ],
     );
   }
 
   Widget _buildPaymentOption(String method, IconData icon) {
     final isSelected = _selectedPaymentMethod == method;
-    return InkWell(
-      onTap: () => setState(() => _selectedPaymentMethod = method),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.orange.shade50 : Colors.white,
-          border: Border.all(
-            color: isSelected ? Colors.orange : Colors.grey.shade300,
-            width: isSelected ? 2 : 1,
-          ),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: isSelected ? Colors.orange : Colors.grey.shade600),
-            const SizedBox(width: 12),
-            Text(
-              method,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                color: isSelected ? Colors.orange : Colors.black87,
-              ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => setState(() => _selectedPaymentMethod = method),
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? AppTheme.primaryColor.withOpacity(0.12)
+                : AppTheme.cardColor,
+            border: Border.all(
+              color: isSelected
+                  ? AppTheme.primaryColor
+                  : AppTheme.borderColor,
+              width: isSelected ? 2 : 1.5,
             ),
-            const Spacer(),
-            if (isSelected)
-              Icon(Icons.check_circle, color: Colors.orange),
-          ],
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? AppTheme.primaryColor.withOpacity(0.15)
+                      : AppTheme.backgroundColorAlt,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  icon,
+                  color: isSelected ? AppTheme.primaryColor : AppTheme.disabledText,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                method,
+                style: AppTheme.bodyMedium.copyWith(
+                  fontSize: 13,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                  color: isSelected ? AppTheme.primaryColor : AppTheme.lightText,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -440,26 +497,25 @@ class _PaymentScreenState extends State<PaymentScreen> {
   Widget _buildUPIForm() {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-      ),
+      decoration: AppTheme.getCardDecoration(elevated: true),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Enter UPI ID',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            style: AppTheme.heading3.copyWith(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.darkText,
+            ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           TextField(
             controller: _upiController,
-            decoration: InputDecoration(
-              hintText: 'yourname@upi',
-              prefixIcon: const Icon(Icons.account_balance_wallet),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+            decoration: AppTheme.getInputDecoration(
+              label: 'UPI ID',
+              hint: 'yourname@upi',
+              prefixIcon: Icons.account_balance_wallet_rounded,
             ),
           ),
         ],
@@ -470,55 +526,47 @@ class _PaymentScreenState extends State<PaymentScreen> {
   Widget _buildCardForm() {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-      ),
+      decoration: AppTheme.getCardDecoration(elevated: true),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Card Details',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            style: AppTheme.heading3.copyWith(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.darkText,
+            ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           TextField(
             controller: _cardNumberController,
-            decoration: InputDecoration(
-              labelText: 'Card Number',
-              hintText: '1234 5678 9012 3456',
-              prefixIcon: const Icon(Icons.credit_card),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+            decoration: AppTheme.getInputDecoration(
+              label: 'Card Number',
+              hint: '1234 5678 9012 3456',
+              prefixIcon: Icons.credit_card_rounded,
             ),
             keyboardType: TextInputType.number,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           TextField(
             controller: _cardNameController,
-            decoration: InputDecoration(
-              labelText: 'Cardholder Name',
-              hintText: 'John Doe',
-              prefixIcon: const Icon(Icons.person),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+            decoration: AppTheme.getInputDecoration(
+              label: 'Cardholder Name',
+              hint: 'John Doe',
+              prefixIcon: Icons.person_rounded,
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           Row(
             children: [
               Expanded(
                 child: TextField(
                   controller: _cardExpiryController,
-                  decoration: InputDecoration(
-                    labelText: 'Expiry',
-                    hintText: 'MM/YY',
-                    prefixIcon: const Icon(Icons.calendar_today),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                  decoration: AppTheme.getInputDecoration(
+                    label: 'Expiry',
+                    hint: 'MM/YY',
+                    prefixIcon: Icons.calendar_today_rounded,
                   ),
                 ),
               ),
@@ -526,13 +574,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
               Expanded(
                 child: TextField(
                   controller: _cardCvvController,
-                  decoration: InputDecoration(
-                    labelText: 'CVV',
-                    hintText: '123',
-                    prefixIcon: const Icon(Icons.lock),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                  decoration: AppTheme.getInputDecoration(
+                    label: 'CVV',
+                    hint: '123',
+                    prefixIcon: Icons.lock_rounded,
                   ),
                   keyboardType: TextInputType.number,
                   obscureText: true,
@@ -547,20 +592,37 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
   Widget _buildCashInfo() {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.blue.shade50,
+        color: AppTheme.infoColor.withOpacity(0.1),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.blue.shade200),
+        border: Border.all(
+          color: AppTheme.infoColor.withOpacity(0.3),
+          width: 1.5,
+        ),
       ),
       child: Row(
         children: [
-          Icon(Icons.info_outline, color: Colors.blue.shade700),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppTheme.infoColor.withOpacity(0.15),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.info_outline_rounded,
+              color: AppTheme.infoColor,
+              size: 20,
+            ),
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               'Pay in cash when you receive your order',
-              style: TextStyle(color: Colors.blue.shade900),
+              style: AppTheme.bodyMedium.copyWith(
+                color: AppTheme.darkText,
+                fontSize: 14,
+              ),
             ),
           ),
         ],
@@ -568,4 +630,5 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 }
+
 

@@ -13,7 +13,7 @@ import '../services/notification_service.dart';
 import '../services/order_firestore_service.dart';
 import '../services/web_order_broadcast.dart';
 import '../services/seller_profile_service.dart';
-import 'order_details_screen.dart';
+import '../theme/app_theme.dart';
 
 class SellerDashboardScreen extends StatefulWidget {
   final String sellerId;
@@ -31,23 +31,63 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
 
   @override
 Widget build(BuildContext context) {
-  return Scaffold(
-      backgroundColor: Colors.grey.shade50,
+  // Validate sellerId
+  if (widget.sellerId.isEmpty) {
+    return Scaffold(
+      backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.white,
-        toolbarHeight: 44, // Reduced height for more space
-        title: const Text(
+        backgroundColor: AppTheme.cardColor,
+        title: Text(
           'Seller Dashboard',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.black87,
-            fontSize: 17,
+          style: AppTheme.heading3.copyWith(
+            fontWeight: FontWeight.w700,
+            fontSize: 18,
+          ),
+        ),
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error_outline, size: 64, color: AppTheme.errorColor),
+              const SizedBox(height: 16),
+              Text(
+                'Seller ID is missing',
+                style: AppTheme.heading3,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Please log in again to access the seller dashboard.',
+                style: AppTheme.bodyMedium,
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  return Scaffold(
+      backgroundColor: AppTheme.backgroundColor, // Premium pastel background
+      appBar: AppBar(
+        elevation: 0,
+        backgroundColor: AppTheme.cardColor,
+        toolbarHeight: 44,
+        title: Text(
+          'Seller Dashboard',
+          style: AppTheme.heading3.copyWith(
+            fontWeight: FontWeight.w700,
+            fontSize: 18,
           ),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.black87, size: 20),
+            icon: Icon(Icons.refresh_rounded, color: AppTheme.darkText, size: 22),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
             onPressed: () => setState(() {}),
@@ -55,141 +95,152 @@ Widget build(BuildContext context) {
           const SizedBox(width: 8),
         ],
       ),
-    body: ValueListenableBuilder(
-        valueListenable: Hive.box<Order>('ordersBox').listenable(),
-        builder: (context, Box<Order> ordersBox, _) {
-          // Check for new orders when orders box changes (immediately, not just post-frame)
-          NotificationService.checkForNewOrders(context, widget.sellerId);
+    body: Builder(
+      builder: (context) {
+        try {
+          final ordersBox = Hive.box<Order>('ordersBox');
+          final listingBox = Hive.box<Listing>('listingBox');
           
           return ValueListenableBuilder(
-      valueListenable: Hive.box<Listing>('listingBox').listenable(),
-            builder: (context, Box<Listing> listingBox, _) {
-              final myListings = listingBox.values
-                  .where((l) => l.sellerId == widget.sellerId)
-                  .toList();
+            valueListenable: ordersBox.listenable(),
+            builder: (context, Box<Order> ordersBox, _) {
+              // Check for new orders when orders box changes (immediately, not just post-frame)
+              NotificationService.checkForNewOrders(context, widget.sellerId);
+              
+              return ValueListenableBuilder(
+                valueListenable: listingBox.listenable(),
+                builder: (context, Box<Listing> listingBox, _) {
+                  try {
+                    final myListings = listingBox.values
+                        .where((l) => l.sellerId == widget.sellerId)
+                        .toList();
 
-              // Filter orders by sellerId (new field) or by listing sellerId (backward compatibility)
-              final myOrders = ordersBox.values
-                  .where((order) {
-                    // First check if order has sellerId field (new orders)
-                    if (order.sellerId.isNotEmpty && order.sellerId == widget.sellerId) {
-                      return true;
-                    }
-                    // Fallback: check via listing (for old orders)
-                    try {
-                      final listingKey = int.tryParse(order.listingId);
-                      if (listingKey != null) {
-                        final listing = listingBox.get(listingKey);
-                        return listing?.sellerId == widget.sellerId;
-                      }
-                    } catch (e) {
-                      return false;
-                    }
-                    return false;
-                  })
-                  .toList();
+                    // Filter orders by sellerId (new field) or by listing sellerId (backward compatibility)
+                    final myOrders = ordersBox.values
+                        .where((order) {
+                          // First check if order has sellerId field (new orders)
+                          if (order.sellerId.isNotEmpty && order.sellerId == widget.sellerId) {
+                            return true;
+                          }
+                          // Fallback: check via listing (for old orders)
+                          try {
+                            final listingKey = int.tryParse(order.listingId);
+                            if (listingKey != null) {
+                              final listing = listingBox.get(listingKey);
+                              return listing?.sellerId == widget.sellerId;
+                            }
+                          } catch (e) {
+                            return false;
+                          }
+                          return false;
+                        })
+                        .toList();
 
-              final metrics = _calculateMetrics(myOrders, myListings, _selectedTimeRange, _customStartDate, _customEndDate);
-              final chartData = _getChartData(myOrders, _selectedTimeRange, _customStartDate, _customEndDate);
+                    final metrics = _calculateMetrics(myOrders, myListings, _selectedTimeRange, _customStartDate, _customEndDate);
+                    final chartData = _getChartData(myOrders, _selectedTimeRange, _customStartDate, _customEndDate);
 
-              return SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 16), // Match buyer screens (16px bottom padding)
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-                    // Time Range Selector
-                    _buildTimeRangeSelector(),
-                    if (_selectedTimeRange == 'Custom') ...[
-                      const SizedBox(height: 6),
-                      Row(
+                    return SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24), // Generous padding for professional layout
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Expanded(
-                            child: _buildDatePicker(
-                              label: 'From Date',
-                              date: _customStartDate,
-                              onDateSelected: (date) => setState(() => _customStartDate = date),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _buildDatePicker(
-                              label: 'To Date',
-                              date: _customEndDate,
-                              onDateSelected: (date) => setState(() => _customEndDate = date),
-                            ),
-                          ),
+                          // Key Metrics Cards - 2x2 Grid
+                          _buildKPIGrid(metrics, myOrders),
+                          const SizedBox(height: 28),
+
+                          // Orders Section
+                          _buildPendingOrdersSection(myOrders),
+                          const SizedBox(height: 24),
+                          
+                          // Live Kitchen Orders
+                          _buildLiveKitchenOrdersSection(myOrders),
+                          const SizedBox(height: 28),
+
+                          // Sales Overview Chart (with time range selector)
+                          _buildSalesChart(chartData),
+                          const SizedBox(height: 28),
+
+                          // Top Items Section
+                          _buildItemInsightsSection(myListings, myOrders),
+                          const SizedBox(height: 28),
+
+                          // Reviews Section
+                          _buildReviewsSection(),
+                          const SizedBox(height: 24),
+
+                          // Quick Actions (at bottom)
+                          _buildQuickActions(),
+                          const SizedBox(height: 16),
+                          _buildItemManagementSection(),
                         ],
                       ),
-                      if (_customStartDate == null || _customEndDate == null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Text(
-                            'Please select both start and end dates',
-                            style: TextStyle(color: Colors.orange.shade700, fontSize: 12),
-                          ),
+                    );
+                  } catch (e) {
+                    debugPrint('Error building seller dashboard content: $e');
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24.0),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.error_outline, size: 64, color: AppTheme.errorColor),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Error loading dashboard',
+                              style: AppTheme.heading3,
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Error: $e',
+                              style: AppTheme.bodySmall,
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
                         ),
-                    ],
-                    const SizedBox(height: 8),
-
-                    // Key Metrics Cards
-                    _buildMetricsRow(metrics),
-                    const SizedBox(height: 12),
-
-                    // Sales Chart
-                    _buildSalesChart(chartData),
-                    const SizedBox(height: 12),
-
-                    // Pending Orders (New Orders Awaiting Approval) - ALWAYS SHOW THIS SECTION
-                    _buildPendingOrdersSection(myOrders),
-                    const SizedBox(height: 12),
-                    
-                    // Show all orders that should have accept/reject buttons
-                    _buildAllOrdersNeedingActionSection(myOrders),
-                    const SizedBox(height: 12),
-                    
-                    // Live Kitchen Orders
-                    _buildLiveKitchenOrdersSection(myOrders),
-                    const SizedBox(height: 12),
-
-                    // Debug: Show all orders (temporary - for troubleshooting)
-                    _buildAllOrdersDebugSection(myOrders),
-                    const SizedBox(height: 12),
-
-                    // Quick Actions
-                    _buildQuickActions(),
-                    const SizedBox(height: 12),
-                    _buildItemManagementSection(),
-                    const SizedBox(height: 12),
-
-                    // Item Insights
-                    _buildItemInsightsSection(myListings, myOrders),
-                    const SizedBox(height: 12),
-
-                    // Reviews Section
-                    _buildReviewsSection(),
-                  ],
-                ),
+                      ),
+                    );
+                  }
+                },
               );
             },
           );
-        },
-      ),
-    );
-  }
+        } catch (e) {
+          debugPrint('Error accessing Hive boxes: $e');
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error_outline, size: 64, color: AppTheme.errorColor),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Unable to load dashboard',
+                    style: AppTheme.heading3,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Please restart the app. Error: $e',
+                    style: AppTheme.bodySmall,
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+      },
+    ),
+  );
+}
 
   Widget _buildTimeRangeSelector() {
     return Container(
       padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-          ),
-        ],
-      ),
+      decoration: AppTheme.getCardDecoration(elevated: true),
       child: Row(
         children: [
           _buildTimeRangeChip('Daily', _selectedTimeRange == 'Daily'),
@@ -208,15 +259,26 @@ Widget build(BuildContext context) {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
-            color: isSelected ? Colors.orange : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
+            gradient: isSelected ? AppTheme.primaryGradient : null,
+            color: isSelected ? null : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: AppTheme.teal.withOpacity(0.2),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
           ),
           child: Text(
             label,
             textAlign: TextAlign.center,
             style: TextStyle(
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              color: isSelected ? Colors.white : Colors.grey.shade700,
+              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+              color: isSelected ? Colors.white : AppTheme.lightText,
+              fontSize: 13,
             ),
           ),
         ),
@@ -283,218 +345,392 @@ Widget build(BuildContext context) {
     );
   }
 
-  Widget _buildMetricsRow(Map<String, dynamic> metrics) {
-    return Row(
+  // Premium 2x2 KPI Grid Layout
+  Widget _buildKPIGrid(Map<String, dynamic> metrics, List<Order> orders) {
+    // Count pending orders
+    final pendingCount = orders.where((o) {
+      if (o.isLiveKitchenOrder ?? false) return false;
+      return o.orderStatus == 'PaymentCompleted' || 
+             o.orderStatus == 'AwaitingSellerConfirmation' ||
+             o.orderStatus == 'PaymentPending';
+    }).length;
+    
+    // Count live kitchen orders
+    final liveKitchenCount = orders.where((o) => 
+      (o.isLiveKitchenOrder ?? false) || 
+      ['OrderReceived', 'Preparing', 'ReadyForPickup', 'ReadyForDelivery'].contains(o.orderStatus)
+    ).length;
+    
+    // Get time range text for subtext
+    String timeRangeText = 'This ${_selectedTimeRange.toLowerCase()}';
+    if (_selectedTimeRange == 'Custom' && _customStartDate != null && _customEndDate != null) {
+      timeRangeText = 'Custom range';
+    }
+    
+    return Column(
       children: [
-        Expanded(
-          child: _buildMetricCard(
-            'Total Orders',
-            metrics['totalOrders'].toString(),
-            Icons.shopping_cart,
-            Colors.blue,
-          ),
+        // Row 1: Total Orders & Total Revenue
+        Row(
+          children: [
+            Expanded(
+              child: _buildKPICard(
+                icon: Icons.shopping_cart_rounded,
+                title: 'Total Orders',
+                value: metrics['totalOrders'].toString(),
+                subtext: timeRangeText,
+                iconGradient: LinearGradient(
+                  colors: [AppTheme.teal, AppTheme.softGreen],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildKPICard(
+                icon: Icons.currency_rupee_rounded,
+                title: 'Total Revenue',
+                value: '₹${metrics['totalRevenue'].toStringAsFixed(0)}',
+                subtext: timeRangeText,
+                iconGradient: LinearGradient(
+                  colors: [AppTheme.badgeRecommended, AppTheme.teal],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _buildMetricCard(
-            'Total Revenue',
-            '₹${metrics['totalRevenue'].toStringAsFixed(0)}',
-            Icons.currency_rupee,
-            Colors.green,
-          ),
+        const SizedBox(height: 12),
+        // Row 2: Pending Orders & Live Kitchen
+        Row(
+          children: [
+            Expanded(
+              child: _buildKPICard(
+                icon: Icons.pending_actions_rounded,
+                title: 'Pending Orders',
+                value: pendingCount.toString(),
+                subtext: pendingCount == 0 ? 'No action required' : 'Need your attention',
+                iconGradient: LinearGradient(
+                  colors: [AppTheme.badgeOffer, AppTheme.badgeOffer.withOpacity(0.7)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildKPICard(
+                icon: Icons.local_dining_rounded,
+                title: 'Live Kitchen',
+                value: liveKitchenCount.toString(),
+                subtext: liveKitchenCount == 0 ? 'No active orders' : 'Active orders',
+                iconGradient: LinearGradient(
+                  colors: [AppTheme.softGreen, AppTheme.aqua],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );
   }
 
-  Widget _buildMetricCard(String title, String value, IconData icon, Color color) {
+  // Professional KPI Card - Circular Icon Container, Clean Design
+  Widget _buildKPICard({
+    required IconData icon,
+    required String title,
+    required String value,
+    String? subtext,
+    required LinearGradient iconGradient,
+  }) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+            spreadRadius: 0,
           ),
         ],
       ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10),
+          // Circular icon container with soft colored background
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              gradient: iconGradient,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.teal.withOpacity(0.15),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
                 ),
-                child: Icon(icon, color: color, size: 24),
-              ),
-            ],
+              ],
+            ),
+            child: Icon(icon, color: Colors.white, size: 24),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
+          // KPI Title (small, muted text)
           Text(
             title,
             style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey.shade600,
+              fontSize: 13,
+              color: const Color(0xFF6B7280), // Muted gray
               fontWeight: FontWeight.w500,
+              letterSpacing: 0.1,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 8),
+          // KPI Value (large, bold)
           Text(
             value,
             style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
+              fontSize: 28,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF1F2937), // Dark gray
+              letterSpacing: -0.5,
+              height: 1.1,
             ),
           ),
+          // Optional subtext (helper/status text)
+          if (subtext != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              subtext,
+              style: TextStyle(
+                fontSize: 11,
+                color: const Color(0xFF9CA3AF), // Light muted gray
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
   Widget _buildSalesChart(Map<String, List<double>> chartData) {
-    if (chartData.isEmpty) {
-      return Container(
-        height: 200,
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Center(
-          child: Text(
-            'No sales data available',
-            style: TextStyle(color: Colors.grey.shade600),
-          ),
-        ),
-      );
-    }
-
-    final labels = chartData.keys.toList();
-    final values = chartData.values.map((v) => v[0]).toList();
-    final maxValue = values.isEmpty ? 100.0 : values.reduce((a, b) => a > b ? a : b) * 1.2;
-    
-    // Ensure horizontalInterval is never zero (fl_chart requirement)
-    final horizontalInterval = maxValue > 0 ? (maxValue / 5).clamp(1.0, double.infinity) : 1.0;
-
-    return Container(
-      height: 250,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-          ),
-        ],
-      ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-              const Text(
-            'Sales Overview',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 20),
-          Expanded(
-            child: BarChart(
-              BarChartData(
-                alignment: BarChartAlignment.spaceAround,
-                maxY: maxValue,
-                barTouchData: BarTouchData(enabled: false),
-                titlesData: FlTitlesData(
-                  show: true,
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      getTitlesWidget: (value, meta) {
-                        final index = value.toInt();
-                        if (index >= 0 && index < labels.length) {
-                          return Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: Text(
-                              labels[index],
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.grey.shade600,
-                              ),
-                            ),
-                          );
-                        }
-                        return const Text('');
-                      },
-                    ),
-                  ),
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 40,
-                      getTitlesWidget: (value, meta) {
-                        return Text(
-                          '₹${value.toInt()}',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.grey.shade600,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  topTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  rightTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Time Range Selector (above chart)
+        _buildTimeRangeSelector(),
+        if (_selectedTimeRange == 'Custom') ...[
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildDatePicker(
+                  label: 'From Date',
+                  date: _customStartDate,
+                  onDateSelected: (date) => setState(() => _customStartDate = date),
                 ),
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: false,
-                  horizontalInterval: horizontalInterval,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildDatePicker(
+                  label: 'To Date',
+                  date: _customEndDate,
+                  onDateSelected: (date) => setState(() => _customEndDate = date),
                 ),
-                borderData: FlBorderData(show: false),
-                barGroups: values.asMap().entries.map((entry) {
-                  return BarChartGroupData(
-                    x: entry.key,
-                    barRods: [
-                      BarChartRodData(
-                        toY: entry.value,
-                        color: Colors.orange,
-                        width: 20,
-                        borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(4),
-                        ),
-                      ),
-                    ],
-                  );
-                }).toList(),
+              ),
+            ],
+          ),
+          if (_customStartDate == null || _customEndDate == null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'Please select both start and end dates',
+                style: TextStyle(
+                  color: const Color(0xFFFFB703),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
-          ),
         ],
-      ),
+        const SizedBox(height: 20),
+        // Chart Container
+        if (chartData.isEmpty)
+          Container(
+            height: 200,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.04),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                  spreadRadius: 0,
+                ),
+              ],
+            ),
+            child: Center(
+              child: Text(
+                'No sales data available',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: const Color(0xFF6B7280),
+                ),
+              ),
+            ),
+          )
+        else
+          Builder(
+            builder: (context) {
+              final labels = chartData.keys.toList();
+              final values = chartData.values.map((v) => v[0]).toList();
+              final maxValue = values.isEmpty ? 100.0 : values.reduce((a, b) => a > b ? a : b) * 1.2;
+              
+              // Ensure horizontalInterval is never zero (fl_chart requirement)
+              final horizontalInterval = maxValue > 0 ? (maxValue / 5).clamp(1.0, double.infinity) : 1.0;
+
+              return Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.04),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                      spreadRadius: 0,
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Section Title
+                    Text(
+                      'Sales Overview',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF1F2937), // Dark gray
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      height: 220,
+                      child: BarChart(
+                        BarChartData(
+                          alignment: BarChartAlignment.spaceAround,
+                          maxY: maxValue,
+                          barTouchData: BarTouchData(enabled: false),
+                          titlesData: FlTitlesData(
+                            show: true,
+                            bottomTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true,
+                                getTitlesWidget: (value, meta) {
+                                  final index = value.toInt();
+                                  if (index >= 0 && index < labels.length) {
+                                    return Padding(
+                                      padding: const EdgeInsets.only(top: 8),
+                                      child: Text(
+                                        labels[index],
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: const Color(0xFF6B7280), // Muted gray
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                  return const Text('');
+                                },
+                              ),
+                            ),
+                            leftTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true,
+                                reservedSize: 45,
+                                getTitlesWidget: (value, meta) {
+                                  return Padding(
+                                    padding: const EdgeInsets.only(right: 8),
+                                    child: Text(
+                                      '₹${value.toInt()}',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: const Color(0xFF9CA3AF), // Light muted gray
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                            topTitles: const AxisTitles(
+                              sideTitles: SideTitles(showTitles: false),
+                            ),
+                            rightTitles: const AxisTitles(
+                              sideTitles: SideTitles(showTitles: false),
+                            ),
+                          ),
+                          gridData: FlGridData(
+                            show: true,
+                            drawVerticalLine: false,
+                            horizontalInterval: horizontalInterval,
+                            getDrawingHorizontalLine: (value) {
+                              return FlLine(
+                                color: const Color(0xFFE5E7EB), // Light gray grid lines
+                                strokeWidth: 1,
+                              );
+                            },
+                          ),
+                          borderData: FlBorderData(show: false),
+                          barGroups: values.asMap().entries.map((entry) {
+                            return BarChartGroupData(
+                              x: entry.key,
+                              barRods: [
+                                BarChartRodData(
+                                  toY: entry.value,
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      AppTheme.teal, // Teal/Mint accent
+                                      AppTheme.aqua,
+                                    ],
+                                    begin: Alignment.bottomCenter,
+                                    end: Alignment.topCenter,
+                                  ),
+                                  width: 24,
+                                  borderRadius: const BorderRadius.vertical(
+                                    top: Radius.circular(6),
+                                  ),
+                                ),
+                              ],
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+      ],
     );
   }
 
   Widget _buildPendingOrdersSection(List<Order> orders) {
     // Debug: Print all orders received
-    debugPrint('[SellerDashboard] _buildPendingOrdersSection called with ${orders.length} total orders');
-    for (var order in orders) {
-      debugPrint('[SellerDashboard] Order: ${order.orderId.substring(order.orderId.length - 6)}, status: ${order.orderStatus}, isLiveKitchen: ${order.isLiveKitchenOrder}');
-    }
-    
     // Filter for regular orders (not Live Kitchen) that are pending
     // Also exclude orders with Live Kitchen statuses (OrderReceived, Preparing, etc.) even if flag isn't set
     final liveKitchenStatuses = ['OrderReceived', 'Preparing', 'ReadyForPickup', 'ReadyForDelivery'];
@@ -505,8 +741,6 @@ Widget build(BuildContext context) {
       return !isLiveKitchen;
     }).toList();
     
-    debugPrint('[SellerDashboard] Found ${allRegularOrders.length} regular orders (not Live Kitchen)');
-    
     // Filter for orders that need seller action (pending acceptance/rejection)
     final pendingOrders = allRegularOrders.where((o) => 
       // Include orders that are waiting for seller confirmation
@@ -514,8 +748,6 @@ Widget build(BuildContext context) {
       o.orderStatus == 'AwaitingSellerConfirmation' ||
       o.orderStatus == 'PaymentPending'
     ).toList()..sort((a, b) => b.purchasedAt.compareTo(a.purchasedAt));
-    
-    debugPrint('[SellerDashboard] Found ${pendingOrders.length} pending orders with expected statuses');
     
     // Also show orders that might have been created with wrong status but need action
     // This is a fallback to catch any edge cases
@@ -528,83 +760,71 @@ Widget build(BuildContext context) {
       o.orderStatus != 'Cancelled'
     ).toList();
     
-    debugPrint('[SellerDashboard] Found ${ordersNeedingAction.length} orders needing action (any status)');
-    
     // If no pending orders but there are orders needing action, show those instead
     final ordersToShow = pendingOrders.isNotEmpty ? pendingOrders : ordersNeedingAction;
-    
-    debugPrint('[SellerDashboard] Will show ${ordersToShow.length} orders in pending section');
 
     // ALWAYS show the section header, even if empty
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.shade100,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(Icons.pending_actions, color: Colors.orange.shade700, size: 24),
-                ),
-                const SizedBox(width: 12),
-                const Text(
-                  'Pending Orders',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.orange,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    '${ordersToShow.length}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
+        AppTheme.buildSectionHeader(
+          title: 'Pending Orders',
+          subtitle: ordersToShow.isEmpty ? 'No orders awaiting approval' : '${ordersToShow.length} order(s) need your attention',
+          icon: Icons.pending_actions_rounded,
+          iconColor: AppTheme.badgeOffer, // Amber for pending
         ),
         const SizedBox(height: 12),
         
         // Show pending orders if any
         if (ordersToShow.isNotEmpty) ...[
           if (pendingOrders.isEmpty && ordersNeedingAction.isNotEmpty) ...[
-            // Show warning if showing orders that don't match expected status
+            // Premium warning card with accent strip
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(16),
               margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(
-                color: Colors.amber.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.amber.shade200),
-              ),
-              child: Row(
+              decoration: AppTheme.getCardDecoration(elevated: true),
+              child: Stack(
                 children: [
-                  Icon(Icons.warning_amber, color: Colors.amber.shade700, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Showing ${ordersNeedingAction.length} order(s) that need seller action (status: ${ordersNeedingAction.map((o) => o.orderStatus).join(", ")})',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.amber.shade800,
+                  // Amber accent strip at left
+                  Positioned(
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    child: Container(
+                      width: 4,
+                      decoration: BoxDecoration(
+                        color: AppTheme.badgeOffer,
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(18),
+                          bottomLeft: Radius.circular(18),
+                        ),
                       ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 12),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppTheme.badgeOffer.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(Icons.info_outline_rounded, color: AppTheme.badgeOffer, size: 20),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Showing ${ordersNeedingAction.length} order(s) that need seller action',
+                            style: AppTheme.bodySmall.copyWith(
+                              fontSize: 12,
+                              color: AppTheme.darkText,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -613,37 +833,55 @@ Widget build(BuildContext context) {
           ],
           ...ordersToShow.take(5).map((order) => _buildPendingOrderCard(order)),
         ] else ...[
-          // Show helpful message when no pending orders
+          // Professional Empty State - Informative, not blank
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: Colors.orange.shade50,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.orange.shade200),
+              color: const Color(0xFFFFFBEB), // Light amber tint for pending section
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: const Color(0xFFFFE4B5).withOpacity(0.5),
+                width: 1,
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Icon(Icons.info_outline, color: Colors.orange.shade700, size: 20),
-                    const SizedBox(width: 8),
-                    Text(
-                      'No Pending Orders',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.orange.shade700,
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFB703).withOpacity(0.15), // Amber
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.info_outline_rounded,
+                        color: const Color(0xFFFFB703), // Amber
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'No Pending Orders',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF1F2937), // Dark gray
+                        ),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Orders with status "AwaitingSellerConfirmation" will appear here with Accept/Reject buttons.',
+                  'All orders have been processed. When new orders arrive, they will appear here with Accept/Reject buttons for quick action.',
                   style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.orange.shade800,
+                    fontSize: 14,
+                    color: const Color(0xFF6B7280), // Muted gray
+                    height: 1.5,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -733,144 +971,256 @@ Widget build(BuildContext context) {
   }
 
   Widget _buildPendingOrderCard(Order order) {
-    // Debug: Print order details
-    debugPrint('[SellerDashboard] Building pending order card for: ${order.orderId}, status: ${order.orderStatus}, isLiveKitchen: ${order.isLiveKitchenOrder}');
-    
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.orange.shade200, width: 2),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: const Color(0xFFFFB703).withOpacity(0.2), // Amber border for pending
+          width: 1.5,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.orange.withOpacity(0.1),
-            blurRadius: 10,
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+            spreadRadius: 0,
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      order.foodName,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Text(
-                          'Order ID: ${order.orderId.substring(order.orderId.length - 6)}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade600,
-                          ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        order.foodName,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF1F2937), // Dark gray
                         ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.shade100,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            order.orderStatus,
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Text(
+                            'Order ID: ${order.orderId.substring(order.orderId.length - 6)}',
                             style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.blue.shade800,
-                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                              color: const Color(0xFF6B7280), // Muted gray
                             ),
                           ),
+                          const SizedBox(width: 10),
+                          _buildStatusBadge(order.orderStatus),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Qty: ${order.quantity} × ₹${order.discountedPrice.toStringAsFixed(0)}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: const Color(0xFF6B7280),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
                     Text(
-                      'Qty: ${order.quantity} × ₹${order.discountedPrice.toStringAsFixed(0)}',
+                      '₹${order.pricePaid.toStringAsFixed(0)}',
                       style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey.shade700,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.teal, // Teal accent
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      order.purchasedAt.toLocal().toString().split(' ')[0],
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: const Color(0xFF9CA3AF), // Light muted gray
                       ),
                     ),
                   ],
                 ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    '₹${order.pricePaid.toStringAsFixed(0)}',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.orange,
-                    ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Divider(
+              height: 1,
+              thickness: 1,
+              color: const Color(0xFFE5E7EB), // Light gray divider
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildSecondaryButton(
+                    icon: Icons.close_rounded,
+                    label: 'Reject',
+                    onPressed: () => _rejectOrder(order),
+                    isDanger: true,
                   ),
-                  Text(
-                    order.purchasedAt.toLocal().toString().split(' ')[0],
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade500,
-                    ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: _buildPrimaryButton(
+                    icon: Icons.check_rounded,
+                    label: 'Accept Order',
+                    onPressed: () => _acceptOrder(order),
                   ),
-                ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Premium Status Badge Helper
+  Widget _buildStatusBadge(String status) {
+    Color badgeColor;
+    String displayText;
+    
+    switch (status) {
+      case 'Completed':
+        badgeColor = const Color(0xFF6BCF9E); // Soft green
+        displayText = 'Completed';
+        break;
+      case 'AcceptedBySeller':
+      case 'Confirmed':
+        badgeColor = AppTheme.softGreen;
+        displayText = 'Accepted';
+        break;
+      case 'Pending':
+      case 'PaymentPending':
+      case 'AwaitingSellerConfirmation':
+      case 'PaymentCompleted':
+        badgeColor = AppTheme.badgeOffer; // Amber
+        displayText = 'Pending';
+        break;
+      case 'Cancelled':
+      case 'RejectedBySeller':
+        badgeColor = AppTheme.badgeDiscount; // Soft coral
+        displayText = status == 'Cancelled' ? 'Cancelled' : 'Rejected';
+        break;
+      default:
+        badgeColor = AppTheme.lightText;
+        displayText = status;
+    }
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: badgeColor.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: badgeColor.withOpacity(0.3),
+          width: 1,
+        ),
+      ),
+      child: Text(
+        displayText,
+        style: TextStyle(
+          fontSize: 10,
+          color: badgeColor,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.2,
+        ),
+      ),
+    );
+  }
+
+  // Premium Primary Button with Gradient
+  Widget _buildPrimaryButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+          decoration: AppTheme.getPrimaryButtonDecoration(),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: Colors.white, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => OrderDetailsScreen(order: order)),
-                );
-              },
-              child: const Text('View order details'),
+        ),
+      ),
+    );
+  }
+
+  // Premium Secondary Button with Gradient Border
+  Widget _buildSecondaryButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+    bool isDanger = false,
+  }) {
+    final borderColor = isDanger ? AppTheme.badgeDiscount : AppTheme.teal;
+    final textColor = isDanger ? AppTheme.badgeDiscount : AppTheme.teal;
+    
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+          decoration: BoxDecoration(
+            color: AppTheme.cardColor,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: borderColor,
+              width: 1.5,
             ),
           ),
-          Row(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => _rejectOrder(order),
-                  icon: const Icon(Icons.close, size: 18),
-                  label: const Text('Reject'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.red,
-                    side: const BorderSide(color: Colors.red),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 2,
-                child: ElevatedButton.icon(
-                  onPressed: () => _acceptOrder(order),
-                  icon: const Icon(Icons.check, size: 18),
-                  label: const Text('Accept Order'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
+              Icon(icon, color: textColor, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -947,70 +1297,66 @@ Widget build(BuildContext context) {
       return b.purchasedAt.compareTo(a.purchasedAt);
     });
     
-    // Debug: Print Live Kitchen orders found
-    debugPrint('[SellerDashboard] Found ${liveKitchenOrders.length} Live Kitchen orders');
-    for (var order in liveKitchenOrders) {
-      debugPrint('[SellerDashboard] Live Kitchen Order: ${order.orderId.substring(order.orderId.length - 6)}, status: ${order.orderStatus}, isLiveKitchen: ${order.isLiveKitchenOrder}');
-    }
-
     // Always show the section, even if empty (with helpful message)
     if (liveKitchenOrders.isEmpty) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Colors.green.shade400, Colors.green.shade600],
-                  ),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(Icons.restaurant, color: Colors.white, size: 24),
-              ),
-              const SizedBox(width: 12),
-              const Text(
-                '🔥 Live Kitchen Orders',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
+          AppTheme.buildSectionHeader(
+            title: 'Live Kitchen Orders',
+            subtitle: liveKitchenOrders.isEmpty ? 'No active Live Kitchen orders' : '${liveKitchenOrders.length} active order(s)',
+            icon: Icons.local_dining_rounded,
+            iconColor: AppTheme.softGreen, // Soft green for Live Kitchen
           ),
           const SizedBox(height: 12),
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: Colors.green.shade50,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.green.shade200),
+              color: const Color(0xFFF0FDF4), // Light green tint for Live Kitchen section
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: const Color(0xFFBBF7D0).withOpacity(0.5),
+                width: 1,
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Icon(Icons.info_outline, color: Colors.green.shade700, size: 20),
-                    const SizedBox(width: 8),
-                    Text(
-                      'No Live Kitchen Orders',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.green.shade700,
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF10B981).withOpacity(0.15), // Soft green
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.info_outline_rounded,
+                        color: const Color(0xFF10B981), // Soft green
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'No Live Kitchen Orders',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF1F2937), // Dark gray
+                        ),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Live Kitchen orders with status "OrderReceived", "Preparing", "ReadyForPickup", or "ReadyForDelivery" will appear here.',
+                  'Live Kitchen orders will appear here when buyers place orders on your Live Kitchen listings. You can track their progress from OrderReceived → Preparing → ReadyForPickup.',
                   style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.green.shade800,
+                    fontSize: 14,
+                    color: const Color(0xFF6B7280), // Muted gray
+                    height: 1.5,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -1026,18 +1372,18 @@ Widget build(BuildContext context) {
                     children: [
                       Text(
                         'Live Kitchen Order Flow:',
-                        style: TextStyle(
+                        style: AppTheme.bodySmall.copyWith(
                           fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green.shade800,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.darkText,
                         ),
                       ),
                       const SizedBox(height: 6),
                       Text(
                         '1. Buyer places order → Status: "OrderReceived"\n2. You accept → Status: "Preparing"\n3. Food ready → Status: "ReadyForPickup"\n4. Order completed → Status: "Completed"',
-                        style: TextStyle(
+                        style: AppTheme.bodySmall.copyWith(
                           fontSize: 11,
-                          color: Colors.green.shade700,
+                          color: AppTheme.lightText,
                         ),
                       ),
                     ],
@@ -1838,40 +2184,47 @@ Widget build(BuildContext context) {
 }
 
   Widget _buildActionCard(String title, IconData icon, Color color, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-            ),
-          ],
-        ),
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: AppTheme.getCardDecoration(elevated: true),
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      AppTheme.teal.withOpacity(0.15),
+                      AppTheme.aqua.withOpacity(0.1),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: AppTheme.teal.withOpacity(0.2),
+                    width: 1,
+                  ),
+                ),
+                child: Icon(icon, color: AppTheme.teal, size: 28),
               ),
-              child: Icon(icon, color: color, size: 28),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
+              const SizedBox(height: 10),
+              Text(
+                title,
+                style: AppTheme.bodySmall.copyWith(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.darkText,
+                ),
+                textAlign: TextAlign.center,
               ),
-              textAlign: TextAlign.center,
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1887,13 +2240,13 @@ Widget build(BuildContext context) {
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            const Text(
-              'Top Items',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
+            AppTheme.buildSectionHeader(
+              title: 'Top Items',
+              subtitle: 'Best performing products',
+              icon: Icons.trending_up_rounded,
+              iconColor: AppTheme.teal,
             ),
             TextButton(
               onPressed: () {
@@ -1904,11 +2257,22 @@ Widget build(BuildContext context) {
                   ),
                 );
               },
-              child: const Text('View All'),
+              style: TextButton.styleFrom(
+                foregroundColor: AppTheme.teal,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+              child: Text(
+                'View All',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.teal,
+                ),
+              ),
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
         ...listings.take(3).map((listing) {
           final itemOrders = orders.where((o) => o.listingId == listing.key.toString()).toList();
           final totalSold = itemOrders.fold<int>(0, (sum, o) => sum + o.quantity);
@@ -1916,43 +2280,94 @@ Widget build(BuildContext context) {
 
           return Container(
             margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(18),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 5,
+                  color: Colors.black.withOpacity(0.04),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                  spreadRadius: 0,
                 ),
               ],
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => SellerItemInsightsScreen(sellerId: widget.sellerId),
+                    ),
+                  );
+                },
+                borderRadius: BorderRadius.circular(18),
+                child: Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: Row(
                     children: [
-                      Text(
-                        listing.name,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              listing.name,
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF1F2937), // Dark gray
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Text(
+                                  'Units sold: ',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: const Color(0xFF6B7280), // Muted gray
+                                  ),
+                                ),
+                                Text(
+                                  '$totalSold',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: const Color(0xFF1F2937),
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Text(
+                                  'Revenue: ',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: const Color(0xFF6B7280),
+                                  ),
+                                ),
+                                Text(
+                                  '₹${revenue.toStringAsFixed(0)}',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: const Color(0xFF1F2937),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Sold: $totalSold | Revenue: ₹${revenue.toStringAsFixed(0)}',
-                        style: TextStyle(
-                          color: Colors.grey.shade600,
-                          fontSize: 12,
-                        ),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        color: const Color(0xFF9CA3AF), // Light muted gray
+                        size: 24,
                       ),
                     ],
                   ),
                 ),
-                Icon(Icons.chevron_right, color: Colors.grey.shade400),
-              ],
+              ),
             ),
           );
         }),
@@ -1966,13 +2381,13 @@ Widget build(BuildContext context) {
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            const Text(
-              'Recent Reviews',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
+            AppTheme.buildSectionHeader(
+              title: 'Reviews',
+              subtitle: 'Customer feedback',
+              icon: Icons.star_outline_rounded,
+              iconColor: AppTheme.badgeOffer, // Amber for reviews
             ),
             TextButton(
               onPressed: () {
@@ -1983,11 +2398,22 @@ Widget build(BuildContext context) {
                   ),
                 );
               },
-              child: const Text('View All'),
+              style: TextButton.styleFrom(
+                foregroundColor: AppTheme.teal,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+              child: Text(
+                'View All',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.teal,
+                ),
+              ),
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
         ValueListenableBuilder(
           valueListenable: Hive.box('ratingsBox').listenable(),
           builder: (context, Box box, _) {
@@ -1999,16 +2425,54 @@ Widget build(BuildContext context) {
 
             if (ratings.isEmpty) {
               return Container(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.04),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                      spreadRadius: 0,
+                    ),
+                  ],
                 ),
-                child: Center(
-                  child: Text(
-                    'No reviews yet',
-                    style: TextStyle(color: Colors.grey.shade600),
-                  ),
+                child: Column(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFB703).withOpacity(0.15), // Amber
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.star_outline_rounded,
+                        color: const Color(0xFFFFB703),
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No reviews yet',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF1F2937),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Customer reviews will appear here once buyers rate your products.',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: const Color(0xFF6B7280),
+                        height: 1.5,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ),
               );
             }

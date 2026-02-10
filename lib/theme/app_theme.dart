@@ -1,44 +1,71 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  // Beautiful, Warm Color Palette - More Pleasant and Easy on the Eyes
-  static const Color primaryColor = Color(0xFF4A90E2); // Soft Blue
-  static const Color secondaryColor = Color(0xFF7B68EE); // Soft Purple
-  static const Color accentColor = Color(0xFFFF6B9D); // Soft Pink
-  static const Color successColor = Color(0xFF50C878); // Fresh Green
-  static const Color warningColor = Color(0xFFFFB347); // Warm Orange
-  static const Color errorColor = Color(0xFFFF6B6B); // Soft Red
-  static const Color infoColor = Color(0xFF5DADE2); // Sky Blue
+  // Premium Color System - Soft Pastel Gradient-Based Design
+  // Primary Brand Gradient: Teal → Aqua → Soft Green
+  static const Color teal = Color(0xFF5EC6C6); // #5EC6C6
+  static const Color aqua = Color(0xFF6FD3C8); // #6FD3C8
+  static const Color softGreen = Color(0xFFA7E3B3); // #A7E3B3
+  
+  // Primary Colors
+  static const Color primaryColor = teal; // Use teal as primary
+  static const Color secondaryColor = aqua;
+  static const Color accentColor = softGreen;
+  
+  // Badge Colors
+  static const Color badgeRecommended = Color(0xFF6FA8FF); // Soft blue
+  static const Color badgeDiscount = Color(0xFFFF6B6B); // Coral red
+  static const Color badgeOffer = Color(0xFFFFB703); // Peach/orange
+  
+  // Status Colors (Softer versions)
+  static const Color successColor = softGreen;
+  static const Color warningColor = badgeOffer;
+  static const Color errorColor = badgeDiscount;
+  static const Color infoColor = badgeRecommended;
 
-  // Neutral Colors - Softer and More Pleasant
-  static const Color darkText = Color(0xFF2C3E50);
-  static const Color lightText = Color(0xFF7F8C8D);
-  static const Color backgroundColor = Color(0xFFF8F9FA);
+  // Background Colors - Very Light Pastel
+  static const Color backgroundColor = Color(0xFFF7F5FB); // Light pastel lavender/pearl white
+  static const Color backgroundColorAlt = Color(0xFFFAFAFE); // Alternative pearl white
   static const Color cardColor = Colors.white;
+  static const Color surfaceColor = Colors.white;
+
+  // Text Colors
+  static const Color darkText = Color(0xFF2E3440); // Deep slate / charcoal
+  static const Color lightText = Color(0xFF6B7280); // Muted grey-blue
+  static const Color disabledText = Color(0xFFB0B7C3); // Disabled text/icons
   static const Color borderColor = Color(0xFFE8ECEF);
-  static const Color surfaceColor = Color(0xFFFFFBF8); // Warm white
 
-  // Beautiful Gradients - Softer and More Elegant
+  // Premium Brand Gradient - Teal → Aqua → Soft Green
   static const LinearGradient primaryGradient = LinearGradient(
-    colors: [Color(0xFF4A90E2), Color(0xFF7B68EE)],
+    colors: [teal, aqua, softGreen],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
+  // Savings/Wallet Gradient (Blue → Green)
+  static const LinearGradient savingsGradient = LinearGradient(
+    colors: [Color(0xFF6FA8FF), Color(0xFF5EC6C6), Color(0xFFA7E3B3)],
+    begin: Alignment.centerLeft,
+    end: Alignment.centerRight,
+  );
+
+  // Success Gradient
   static const LinearGradient successGradient = LinearGradient(
-    colors: [Color(0xFF50C878), Color(0xFF48BB78)],
+    colors: [aqua, softGreen],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
+  // Accent Gradient (for highlights)
   static const LinearGradient accentGradient = LinearGradient(
-    colors: [Color(0xFFFF6B9D), Color(0xFFFF8C94)],
+    colors: [teal, aqua],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
+  // Warm Gradient (for offers)
   static const LinearGradient warmGradient = LinearGradient(
-    colors: [Color(0xFFFFB347), Color(0xFFFFA07A)],
+    colors: [badgeOffer, Color(0xFFFFD54F)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
@@ -48,31 +75,52 @@ class AppTheme {
   static Color getEggColor() => const Color(0xFFFFB347);
   static Color getNonVegColor() => const Color(0xFFFF6B6B);
 
-  // Card Styles - More Elegant with Better Shadows
+  // Card Styles - Premium with Soft Gradient Glow
   static BoxDecoration getCardDecoration({bool elevated = true, Color? backgroundColor}) {
     return BoxDecoration(
       color: backgroundColor ?? cardColor,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(18), // 18-22px rounded corners
       boxShadow: elevated
           ? [
               BoxShadow(
-                color: Colors.black.withOpacity(0.06),
-                blurRadius: 24,
-                offset: const Offset(0, 6),
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 20,
+                offset: const Offset(0, 4),
                 spreadRadius: 0,
               ),
               BoxShadow(
-                color: Colors.black.withOpacity(0.03),
-                blurRadius: 12,
+                color: Colors.black.withOpacity(0.02),
+                blurRadius: 8,
                 offset: const Offset(0, 2),
                 spreadRadius: 0,
               ),
             ]
           : null,
       border: Border.all(
-        color: borderColor,
-        width: 1,
+        color: borderColor.withOpacity(0.5),
+        width: 0.5,
       ),
+    );
+  }
+
+  // Category Card Decoration with Dark Overlay Gradient
+  static BoxDecoration getCategoryCardDecoration() {
+    return BoxDecoration(
+      borderRadius: BorderRadius.circular(20), // 18-22px rounded corners
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.1),
+          blurRadius: 12,
+          offset: const Offset(0, 4),
+          spreadRadius: 0,
+        ),
+        BoxShadow(
+          color: Colors.black.withOpacity(0.05),
+          blurRadius: 6,
+          offset: const Offset(0, 2),
+          spreadRadius: 0,
+        ),
+      ],
     );
   }
 
@@ -128,22 +176,35 @@ class AppTheme {
     );
   }
 
-  // Badge Styles - Softer and More Elegant
+  // Badge Styles - Premium Pill-Shaped with Soft Shadows
   static BoxDecoration getBadgeDecoration(Color color, {bool withShadow = true}) {
     return BoxDecoration(
       color: color,
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(20), // Pill-shaped
       boxShadow: withShadow
           ? [
               BoxShadow(
-                color: color.withOpacity(0.25),
+                color: color.withOpacity(0.3),
                 blurRadius: 8,
-                offset: const Offset(0, 3),
+                offset: const Offset(0, 2),
                 spreadRadius: 0,
               ),
             ]
           : null,
     );
+  }
+
+  // Badge Decorations for Specific Types
+  static BoxDecoration getRecommendedBadgeDecoration() {
+    return getBadgeDecoration(badgeRecommended);
+  }
+
+  static BoxDecoration getDiscountBadgeDecoration() {
+    return getBadgeDecoration(badgeDiscount);
+  }
+
+  static BoxDecoration getOfferBadgeDecoration() {
+    return getBadgeDecoration(badgeOffer);
   }
 
   // Input Field Styles - Cleaner and More Spacious
@@ -248,7 +309,7 @@ class AppTheme {
     height: 1.4,
   );
 
-  // Chip Styles - Softer and More Elegant
+  // Chip Styles - Premium Pill-Shaped with Soft Shadows
   static BoxDecoration getChipDecoration({
     required bool isSelected,
     Color? color,
@@ -266,24 +327,31 @@ class AppTheme {
               end: Alignment.bottomRight,
             )
           : null,
-      color: isSelected ? null : chipColor.withOpacity(0.08),
-      borderRadius: BorderRadius.circular(12),
+      color: isSelected ? null : chipColor.withOpacity(0.1),
+      borderRadius: BorderRadius.circular(20), // Pill-shaped
       border: Border.all(
         color: isSelected
             ? chipColor
-            : chipColor.withOpacity(0.25),
-        width: isSelected ? 2 : 1.5,
+            : chipColor.withOpacity(0.2),
+        width: isSelected ? 2 : 1,
       ),
       boxShadow: isSelected
           ? [
               BoxShadow(
-                color: chipColor.withOpacity(0.2),
-                blurRadius: 10,
-                offset: const Offset(0, 3),
+                color: chipColor.withOpacity(0.25),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
                 spreadRadius: 0,
               ),
             ]
-          : null,
+          : [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 4,
+                offset: const Offset(0, 1),
+                spreadRadius: 0,
+              ),
+            ],
     );
   }
 
@@ -316,6 +384,8 @@ class AppTheme {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               if (icon != null) ...[
                 Container(
@@ -343,7 +413,7 @@ class AppTheme {
                 ),
                 const SizedBox(width: 14),
               ],
-              Expanded(
+              Flexible(
                 child: Text(
                   title,
                   style: heading3.copyWith(fontSize: 22),
