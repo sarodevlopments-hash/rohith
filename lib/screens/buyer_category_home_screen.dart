@@ -314,32 +314,48 @@ class _BuyerCategoryHomeScreenState extends State<BuyerCategoryHomeScreen> {
           SellType.liveKitchen: allListings.where((l) => l.type == SellType.liveKitchen).length,
         };
 
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Total Savings Banner
+        return Container(
+          color: AppTheme.backgroundColor, // Premium pastel lavender/pearl white background
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+              // Total Savings Banner - Premium Gradient
               if (_totalSavings > 0)
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  margin: const EdgeInsets.only(bottom: 20),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  margin: const EdgeInsets.only(bottom: 24),
                   decoration: BoxDecoration(
-                    gradient: AppTheme.successGradient,
-                    borderRadius: BorderRadius.circular(12),
+                    gradient: AppTheme.savingsGradient, // Blue → Teal → Green gradient
+                    borderRadius: BorderRadius.circular(18),
                     boxShadow: [
                       BoxShadow(
-                        color: AppTheme.successColor.withOpacity(0.3),
+                        color: AppTheme.teal.withOpacity(0.2),
+                        blurRadius: 16,
+                        offset: const Offset(0, 6),
+                        spreadRadius: 0,
+                      ),
+                      BoxShadow(
+                        color: AppTheme.softGreen.withOpacity(0.15),
                         blurRadius: 8,
-                        offset: const Offset(0, 4),
+                        offset: const Offset(0, 2),
+                        spreadRadius: 0,
                       ),
                     ],
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.savings, color: Colors.white, size: 24),
-                      const SizedBox(width: 12),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.25),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.savings_rounded, color: Colors.white, size: 24),
+                      ),
+                      const SizedBox(width: 16),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -347,17 +363,20 @@ class _BuyerCategoryHomeScreenState extends State<BuyerCategoryHomeScreen> {
                             Text(
                               'Total Savings',
                               style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.white.withOpacity(0.9),
+                                fontSize: 13,
+                                color: Colors.white.withOpacity(0.95),
                                 fontWeight: FontWeight.w500,
+                                letterSpacing: 0.2,
                               ),
                             ),
+                            const SizedBox(height: 2),
                             Text(
                               '₹${_totalSavings.toStringAsFixed(2)}',
                               style: const TextStyle(
-                                fontSize: 20,
+                                fontSize: 24,
                                 color: Colors.white,
-                                fontWeight: FontWeight.bold,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.5,
                               ),
                             ),
                           ],
@@ -533,8 +552,8 @@ class _BuyerCategoryHomeScreenState extends State<BuyerCategoryHomeScreen> {
                       _buildSectionHeader(
                         title: 'Recommended for You',
                         subtitle: 'Based on your preferences',
-                        icon: Icons.thumb_up,
-                        iconColor: AppTheme.primaryColor,
+                        icon: Icons.thumb_up_rounded,
+                        iconColor: AppTheme.badgeRecommended,
                       ),
                       const SizedBox(height: 12),
                       SizedBox(
@@ -753,6 +772,7 @@ class _BuyerCategoryHomeScreenState extends State<BuyerCategoryHomeScreen> {
               const SizedBox(height: 24),
             ],
           ),
+        ),
         );
       },
     );
@@ -842,19 +862,9 @@ class _BuyerCategoryHomeScreenState extends State<BuyerCategoryHomeScreen> {
         );
       },
       child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.08),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-              spreadRadius: 0,
-            ),
-          ],
-        ),
+        decoration: AppTheme.getCategoryCardDecoration(),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20), // 18-22px rounded corners
           child: Stack(
             children: [
               // Image with better styling
@@ -930,34 +940,52 @@ class _BuyerCategoryHomeScreenState extends State<BuyerCategoryHomeScreen> {
                           );
                         },
                       ),
-              // Gradient overlay for better text readability
+              // Premium Dark Overlay Gradient at Bottom
               Positioned(
                 bottom: 0,
                 left: 0,
                 right: 0,
                 child: Container(
+                  height: 80, // Cover bottom portion with gradient
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
                         Colors.transparent,
-                        Colors.black.withOpacity(0.4),
+                        Colors.black.withOpacity(0.3),
+                        Colors.black.withOpacity(0.7),
+                        Colors.black.withOpacity(0.85),
                       ],
+                      stops: const [0.0, 0.3, 0.7, 1.0],
                     ),
                   ),
-                  padding: const EdgeInsets.all(12),
+                ),
+              ),
+              // White Bold Title Text with Shadow
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
                   child: Text(
                     title,
-                    style: AppTheme.heading4.copyWith(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
                       color: Colors.white,
+                      letterSpacing: -0.3,
                       shadows: [
                         Shadow(
-                          color: Colors.black.withOpacity(0.5),
-                          blurRadius: 4,
-                          offset: const Offset(0, 1),
+                          color: Colors.black54,
+                          blurRadius: 6,
+                          offset: Offset(0, 2),
+                        ),
+                        Shadow(
+                          color: Colors.black26,
+                          blurRadius: 3,
+                          offset: Offset(0, 1),
                         ),
                       ],
                     ),

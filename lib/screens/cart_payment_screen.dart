@@ -13,6 +13,7 @@ import '../services/web_order_broadcast.dart';
 import '../services/user_service.dart';
 import '../services/seller_profile_service.dart';
 import '../services/accepted_order_notification_service.dart';
+import '../theme/app_theme.dart';
 
 class CartPaymentScreen extends StatefulWidget {
   final List<CartItemData> items;
@@ -308,67 +309,123 @@ class _CartPaymentScreenState extends State<CartPaymentScreen> {
                     final rejected = status == 'RejectedBySeller' || status == 'Cancelled';
                     final isFinal = accepted || rejected;
 
-                    final firestoreHint = snap.hasError
-                        ? 'Firestore: error'
-                        : (snap.connectionState == ConnectionState.waiting && data == null)
-                            ? 'Firestore: connecting'
-                            : (snap.data?.exists ?? false)
-                                ? 'Firestore: ok'
-                                : 'Firestore: no doc';
-
-                    final originHint = 'Note: browser tabs on different localhost ports cannot share Hive/broadcast.';
-
-                    return AlertDialog(
-                      title: const Text('Payment successful'),
-                      content: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Order ID: $orderId'),
-                          const SizedBox(height: 8),
-                          Text('Status: $status'),
-                          const SizedBox(height: 8),
-                          Text('Items: $itemsText'),
-                          const SizedBox(height: 6),
-                          Text('Total: ₹${totalPaid.toStringAsFixed(0)}'),
-                          const SizedBox(height: 8),
-                          if (!isFinal) const Text('Waiting for seller to accept'),
-                          if (accepted) const Text('Order accepted ✅'),
-                          if (rejected) const Text('Order rejected ❌'),
-                          const SizedBox(height: 8),
-                          Text(
-                            '$firestoreHint'
-                            '${broadcastStatus != null ? ' • Broadcast: ok' : ''}'
-                            '${localStatus != null ? ' • Hive: ok' : ''}',
-                            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                          ),
-                          if (snap.hasError)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 6),
-                              child: Text(
-                                'Sync error: ${snap.error}',
-                                style: TextStyle(color: Colors.red.shade700, fontSize: 12),
+                    return Dialog(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.all(28),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Success Icon
+                            Container(
+                              padding: const EdgeInsets.all(20),
+                              decoration: BoxDecoration(
+                                gradient: AppTheme.successGradient,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.check_circle_rounded,
+                                color: Colors.white,
+                                size: 48,
                               ),
                             ),
-                          Padding(
-                            padding: const EdgeInsets.only(top: 6),
-                            child: Text(
-                              originHint,
-                              style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
+                            const SizedBox(height: 24),
+                            
+                            // Title
+                            Text(
+                              'Payment Successful',
+                              style: AppTheme.heading2.copyWith(
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.darkText,
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                      actions: [
-                        // Always show Close button - user can dismiss immediately after payment
-                        TextButton(
-                          onPressed: () {
-                            Navigator.of(ctx).pop();
-                            Navigator.of(context).pop(); // close payment screen
-                          },
-                          child: const Text('Close'),
+                            const SizedBox(height: 12),
+                            
+                            // Status Message
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: AppTheme.warningColor.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: AppTheme.warningColor.withOpacity(0.3),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Text(
+                                !isFinal
+                                    ? 'Awaiting seller confirmation'
+                                    : accepted
+                                        ? 'Order accepted ✅'
+                                        : rejected
+                                            ? 'Order rejected ❌'
+                                            : 'Processing...',
+                                style: AppTheme.bodyMedium.copyWith(
+                                  fontSize: 14,
+                                  color: AppTheme.darkText,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            
+                            // Order Details
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: AppTheme.backgroundColorAlt,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Column(
+                                children: [
+                                  _buildDetailRow('Order ID', orderId.substring(orderId.length - 8)),
+                                  const SizedBox(height: 12),
+                                  _buildDetailRow('Items', itemsText),
+                                  const SizedBox(height: 12),
+                                  _buildDetailRow('Total', '₹${totalPaid.toStringAsFixed(0)}'),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            
+                            // Close Button
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                onPressed: () {
+                                  Navigator.of(ctx).pop();
+                                  Navigator.of(context).pop(); // close payment screen
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppTheme.primaryColor,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  elevation: 0,
+                                ),
+                                child: Text(
+                                  'Close',
+                                  style: AppTheme.heading3.copyWith(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     );
                   },
                 );
@@ -451,6 +508,29 @@ class _CartPaymentScreenState extends State<CartPaymentScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: AppTheme.bodySmall.copyWith(
+            fontSize: 13,
+            color: AppTheme.lightText,
+          ),
+        ),
+        Text(
+          value,
+          style: AppTheme.bodyMedium.copyWith(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.darkText,
+          ),
+        ),
+      ],
     );
   }
 

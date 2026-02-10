@@ -78,7 +78,7 @@ class AcceptedOrderNotificationService {
       // Exclude these statuses explicitly: PaymentPending, PaymentCompleted, AwaitingSellerConfirmation
       final pendingStatuses = ['PaymentPending', 'PaymentCompleted', 'AwaitingSellerConfirmation'];
       if (pendingStatuses.contains(order.orderStatus)) {
-        debugPrint('[AcceptedOrderNotification] Order ${order.orderId} is still pending (status: ${order.orderStatus}), skipping');
+        // Order still pending, skip silently
         return false;
       }
       
@@ -88,26 +88,26 @@ class AcceptedOrderNotificationService {
       if (!isLiveKitchen) {
         // Regular orders MUST have sellerRespondedAt timestamp to be considered accepted
         if (order.sellerRespondedAt == null) {
-          debugPrint('[AcceptedOrderNotification] Order ${order.orderId} has no sellerRespondedAt timestamp, skipping (not actually accepted yet)');
+          // Order has no sellerRespondedAt timestamp, skip silently
           return false;
         }
         // Verify seller responded AFTER the order was purchased (not before)
         final orderTime = order.paymentCompletedAt ?? order.purchasedAt;
         if (order.sellerRespondedAt!.isBefore(orderTime) || 
             order.sellerRespondedAt!.difference(orderTime).inSeconds < 1) {
-          debugPrint('[AcceptedOrderNotification] Order ${order.orderId} sellerRespondedAt is invalid (before purchase), skipping');
+          // Order sellerRespondedAt is invalid, skip silently
           return false;
         }
         // CRITICAL: If order was just created (within last 30 seconds) and seller hasn't responded, skip
         // This prevents showing notifications for orders that were just placed
         if (orderTime.isAfter(DateTime.now().subtract(const Duration(seconds: 30))) &&
             order.sellerRespondedAt!.difference(orderTime).inSeconds < 5) {
-          debugPrint('[AcceptedOrderNotification] Order ${order.orderId} was just created, seller likely hasn\'t responded yet, skipping');
+          // Order was just created, skip silently
           return false;
         }
         // Only show if seller responded recently (within last hour) - prevents showing old notifications
         if (order.sellerRespondedAt!.isBefore(DateTime.now().subtract(const Duration(hours: 1)))) {
-          debugPrint('[AcceptedOrderNotification] Order ${order.orderId} seller responded too long ago, skipping');
+          // Order too old, skip silently
           return false;
         }
       }
@@ -124,7 +124,7 @@ class AcceptedOrderNotificationService {
       
       // CRITICAL: Double-check status matches - if status doesn't match accepted status, skip
       if (!isAccepted) {
-        debugPrint('[AcceptedOrderNotification] Order ${order.orderId} status (${order.orderStatus}) does not match accepted status, skipping');
+        // Order status does not match accepted status, skip silently
         return false;
       }
       
@@ -132,7 +132,7 @@ class AcceptedOrderNotificationService {
       final orderTime = order.paymentCompletedAt ?? order.purchasedAt;
       final isRecent = orderTime.isAfter(DateTime.now().subtract(const Duration(days: 7)));
       if (!isRecent) {
-        debugPrint('[AcceptedOrderNotification] Order ${order.orderId} is too old, skipping');
+        // Order is too old, skip silently
         return false;
       }
       

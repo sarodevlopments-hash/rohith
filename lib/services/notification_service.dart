@@ -338,8 +338,7 @@ class NotificationService {
       return;
     }
 
-    debugPrint('[NotificationService] Checking for new orders for seller: $sellerId');
-    debugPrint('[NotificationService] Total orders in box: ${_notificationBox.length}');
+    // Checking for new orders silently (reduces log spam)
 
     final orders = _notificationBox.values.where((order) {
       // Check if order is for this seller and is pending
@@ -384,7 +383,7 @@ class NotificationService {
     }).toList()
       ..sort((a, b) => (b.paymentCompletedAt ?? b.purchasedAt).compareTo(a.paymentCompletedAt ?? a.purchasedAt));
 
-    debugPrint('[NotificationService] Found ${orders.length} pending orders for seller');
+    // Found ${orders.length} pending orders for seller (logged only when > 0)
 
     // Show notification for the most recent order not yet shown
     for (final order in orders) {
@@ -698,14 +697,19 @@ class NotificationService {
             ],
           ],
         ),
-        backgroundColor: Colors.green.shade700,
+        backgroundColor: const Color(0xFFA7E3B3), // Soft green from AppTheme.successColor
         // Persist until user takes action - buyer must acknowledge order acceptance
         duration: const Duration(days: 1), // Very long duration - dismisses only on user action
         behavior: SnackBarBehavior.floating, // Make it floating so it's more visible
         margin: const EdgeInsets.all(16), // Add margin for floating behavior
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        elevation: 8,
         action: SnackBarAction(
           label: 'View Order',
-          textColor: Colors.white,
+          textColor: const Color(0xFF2E3440), // Dark text from AppTheme
+          backgroundColor: Colors.white,
           onPressed: () {
             messenger.hideCurrentSnackBar();
             if (scaffoldContext.mounted) {
@@ -817,26 +821,32 @@ class _NewOrderNotificationCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    // Warm orange (brand-like) background for the seller new-order alert.
-    // Keep high-contrast white foreground for accessibility.
-    const Color backgroundColor = Color(0xFFF57C00); // warm orange
+    // Premium floating card design with status colors
+    // Use teal/mint for pending orders (primary brand color)
+    const Color backgroundColor = Color(0xFF5EC6C6); // Teal from AppTheme
     const Color onBackgroundColor = Colors.white;
 
     return Material(
       color: Colors.transparent,
       elevation: 0,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(20),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
         decoration: BoxDecoration(
           color: backgroundColor,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.16),
-              blurRadius: 18,
-              spreadRadius: 1,
-              offset: const Offset(0, 8),
+              color: backgroundColor.withOpacity(0.3),
+              blurRadius: 20,
+              spreadRadius: 0,
+              offset: const Offset(0, 4),
+            ),
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 12,
+              spreadRadius: 0,
+              offset: const Offset(0, 2),
             ),
           ],
         ),
@@ -844,16 +854,16 @@ class _NewOrderNotificationCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Container(
-              width: 32,
-              height: 32,
+              width: 40,
+              height: 40,
               decoration: BoxDecoration(
-                color: onBackgroundColor.withOpacity(0.12),
+                color: onBackgroundColor.withOpacity(0.2),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 Icons.notifications_active_rounded,
                 color: onBackgroundColor,
-                size: 18,
+                size: 22,
               ),
             ),
             const SizedBox(width: 12),
@@ -948,28 +958,31 @@ class _NewOrderNotificationCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 12),
-            TextButton(
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(999),
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onView,
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: onBackgroundColor,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    'View',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: backgroundColor,
+                        ) ??
+                        TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: backgroundColor,
+                        ),
+                  ),
                 ),
-                backgroundColor: onBackgroundColor,
-                foregroundColor: backgroundColor,
-                minimumSize: const Size(0, 0),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              onPressed: onView,
-              child: Text(
-                'View',
-                style: theme.textTheme.labelMedium?.copyWith(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ) ??
-                    const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
               ),
             ),
           ],

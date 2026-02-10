@@ -2508,8 +2508,9 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Colors.transparent,
+        toolbarHeight: 80,
         leading: Container(
-          margin: const EdgeInsets.only(left: 4),
+          margin: const EdgeInsets.only(left: 4, top: 8, bottom: 8),
           child: Material(
             color: Colors.transparent,
             child: InkWell(
@@ -2551,75 +2552,73 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
           ),
         ),
         title: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          AppTheme.primaryColor,
-                          AppTheme.primaryColor.withOpacity(0.8),
-                        ],
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      AppTheme.primaryColor,
+                      AppTheme.primaryColor.withOpacity(0.8),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.primaryColor.withOpacity(0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.storefront_rounded,
+                  color: Colors.white,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      "Start Selling",
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: Colors.grey.shade900,
+                        fontSize: 23,
+                        letterSpacing: -0.6,
+                        height: 1.1,
                       ),
-                      borderRadius: BorderRadius.circular(10),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppTheme.primaryColor.withOpacity(0.3),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
                     ),
-                    child: const Icon(
-                      Icons.storefront_rounded,
-                      color: Colors.white,
-                      size: 18,
+                    const SizedBox(height: 2),
+                    Text(
+                      "List your products",
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade600,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: 0.1,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "Start Selling",
-                          style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            color: Colors.grey.shade900,
-                            fontSize: 23,
-                            letterSpacing: -0.6,
-                            height: 1.1,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          "List your products",
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.grey.shade600,
-                            fontWeight: FontWeight.w500,
-                            letterSpacing: 0.1,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),
         ),
+        centerTitle: true,
         actions: [
           if (sellerProfile != null)
             Container(
-              margin: const EdgeInsets.only(right: 8),
+              margin: const EdgeInsets.only(right: 8, top: 8, bottom: 8),
               child: Material(
                 color: Colors.transparent,
                 child: InkWell(
@@ -2684,10 +2683,13 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
       ),
       body: Form(
         key: _formKey,
-        child: ListView(
-          controller: _scrollController,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        child: Column(
           children: [
+            Expanded(
+              child: ListView(
+                controller: _scrollController,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                children: [
             // Pending Items List (when in multi-item mode)
             if (isMultiItemMode && pendingItems.isNotEmpty) ...[
               _buildSectionTitle(
@@ -4854,21 +4856,29 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                       height: 250,
                       width: double.infinity,
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
+                        color: Colors.grey.shade50,
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
                           color: productImagePath == null
-                              ? Colors.red.shade300
-                              : Colors.green.shade300,
-                          width: 3,
+                              ? AppTheme.borderColor.withOpacity(0.6)
+                              : AppTheme.successColor.withOpacity(0.4),
+                          width: 2,
+                          strokeAlign: BorderSide.strokeAlignInside,
                         ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.03),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
                       child: productImagePath != null
                           ? Stack(
                               fit: StackFit.expand,
                               children: [
                                 ClipRRect(
-                                  borderRadius: BorderRadius.circular(13),
+                                  borderRadius: BorderRadius.circular(14),
                                   child: kIsWeb
                                       ? (productImageBytes != null
                                           ? Image.memory(
@@ -4912,7 +4922,7 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                     decoration: BoxDecoration(
-                                      color: Colors.green.withOpacity(0.9),
+                                      color: AppTheme.successColor.withOpacity(0.9),
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                     child: const Row(
@@ -4936,49 +4946,50 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                             )
                           : Column(
                               mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
                                 Container(
                                   padding: const EdgeInsets.all(20),
                                   decoration: BoxDecoration(
-                                    color: Colors.orange.shade50,
+                                    color: AppTheme.primaryColor.withOpacity(0.08),
                                     shape: BoxShape.circle,
                                   ),
                                   child: Icon(
-                                    Icons.add_photo_alternate,
+                                    Icons.add_photo_alternate_rounded,
                                     size: 64,
-                                    color: Colors.orange.shade700,
+                                    color: AppTheme.primaryColor,
                                   ),
                                 ),
                                 const SizedBox(height: 16),
                                 Text(
                                   "Tap to upload product image",
                                   style: TextStyle(
-                                    color: Colors.grey.shade700,
+                                    color: AppTheme.darkText,
                                     fontSize: 16,
                                     fontWeight: FontWeight.w500,
                                   ),
-                                ),
-                                const SizedBox(height: 8),
-                                if (selectedType != SellType.clothingAndApparel || defaultColorImage == null)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                    decoration: BoxDecoration(
-                                      color: Colors.red.shade50,
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: Text(
-                                      "* Required",
-                                      style: TextStyle(
-                                        color: Colors.red.shade700,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
+                                  textAlign: TextAlign.center,
                                 ),
                               ],
                             ),
                     ),
                   ),
+                  if (selectedType != SellType.clothingAndApparel || defaultColorImage == null) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          "* Required",
+                          style: TextStyle(
+                            color: AppTheme.lightText,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -5305,84 +5316,23 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
 
             const SizedBox(height: 32),
 
-            // Submit Button - PREMIUM STYLE
-            Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                gradient: LinearGradient(
-                  colors: [Colors.orange.shade600, Colors.orange.shade800],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.orange.withOpacity(0.4),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: isSubmitting ? null : _submit,
-                  borderRadius: BorderRadius.circular(16),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 20),
-                    child: isSubmitting
-                        ? const SizedBox(
-                            height: 24,
-                            width: 24,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                            ),
-                          )
-                        : Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                isMultiItemMode ? Icons.add_circle_outline : Icons.upload_rounded,
-                                size: 22,
-                                color: Colors.white,
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                isMultiItemMode ? "Add to List" : "Post Listing",
-                                style: const TextStyle(
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: -0.3,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ],
-                          ),
-                  ),
-                ),
-              ),
-            ),
-            // Post All Listings Button (when in multi-item mode with pending items)
-            if (isMultiItemMode && pendingItems.isNotEmpty) ...[
-              const SizedBox(height: 24),
+            // Single Item Mode: Post Listing Button (inside scrollable area)
+            if (!isMultiItemMode)
               Container(
                 height: 56,
+                width: double.infinity,
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [AppTheme.successColor, AppTheme.successColor.withOpacity(0.85)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+                  gradient: AppTheme.primaryGradient,
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: AppTheme.successColor.withOpacity(0.3),
+                      color: AppTheme.teal.withOpacity(0.3),
                       blurRadius: 16,
                       offset: const Offset(0, 8),
                       spreadRadius: -2,
                     ),
                     BoxShadow(
-                      color: AppTheme.successColor.withOpacity(0.15),
+                      color: AppTheme.teal.withOpacity(0.15),
                       blurRadius: 8,
                       offset: const Offset(0, 4),
                     ),
@@ -5391,27 +5341,212 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                 child: Material(
                   color: Colors.transparent,
                   child: InkWell(
-                    onTap: isSubmitting ? null : _postAllListings,
+                    onTap: isSubmitting ? null : _submit,
                     borderRadius: BorderRadius.circular(16),
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 18),
+                      alignment: Alignment.center,
                       child: isSubmitting
                           ? const SizedBox(
                               height: 24,
                               width: 24,
                               child: CircularProgressIndicator(
-                                strokeWidth: 2,
+                                strokeWidth: 2.5,
                                 valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                               ),
                             )
                           : Row(
                               mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(Icons.cloud_upload_rounded, size: 22, color: Colors.white),
+                                const Icon(Icons.upload_rounded, size: 22, color: Colors.white),
+                                const SizedBox(width: 12),
+                                const Text(
+                                  "Post Listing",
+                                  style: TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: -0.3,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ),
+                ),
+              ),
+            const SizedBox(height: 32),
+
+            // Buttons Section - Clear Hierarchy
+            if (isMultiItemMode) ...[
+              // Primary CTA: Post All Listings (only show when there are pending items)
+              if (pendingItems.isNotEmpty) ...[
+                Container(
+                  height: 56,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.orange.shade600, Colors.orange.shade800],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.orange.withOpacity(0.4),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: isSubmitting ? null : _postAllListings,
+                      borderRadius: BorderRadius.circular(16),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 18),
+                        alignment: Alignment.center,
+                        child: isSubmitting
+                            ? const SizedBox(
+                                height: 24,
+                                width: 24,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                              )
+                            : Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.cloud_upload_rounded, size: 22, color: Colors.white),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    "Post All Listings (${pendingItems.length})",
+                                    style: const TextStyle(
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: -0.3,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+              // Secondary CTA: Add to List (always show in multi-item mode)
+              Container(
+                height: 56,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.orange.shade600, Colors.orange.shade800],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.orange.withOpacity(0.4),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: isSubmitting ? null : _submit,
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      alignment: Alignment.center,
+                      child: isSubmitting
+                          ? const SizedBox(
+                              height: 24,
+                              width: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.add_circle_outline_rounded,
+                                  size: 22,
+                                  color: Colors.white,
+                                ),
                                 const SizedBox(width: 12),
                                 Text(
-                                  "Post All Listings (${pendingItems.length})",
+                                  "Add to List",
                                   style: const TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: -0.3,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ),
+                ),
+              ),
+            ] else ...[
+              // Single Item Mode: Post Listing Button
+              Container(
+                height: 56,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.orange.shade600, Colors.orange.shade800],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.orange.withOpacity(0.4),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: isSubmitting ? null : _submit,
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      alignment: Alignment.center,
+                      child: isSubmitting
+                          ? const SizedBox(
+                              height: 24,
+                              width: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.upload_rounded, size: 22, color: Colors.white),
+                                const SizedBox(width: 12),
+                                const Text(
+                                  "Post Listing",
+                                  style: TextStyle(
                                     fontSize: 17,
                                     fontWeight: FontWeight.w700,
                                     letterSpacing: -0.3,
@@ -5426,6 +5561,9 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
               ),
             ],
             const SizedBox(height: 16), // Consistent 16px bottom padding
+          ],
+        ),
+      ),
           ],
         ),
       ),

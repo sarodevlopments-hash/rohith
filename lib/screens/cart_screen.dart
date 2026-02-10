@@ -9,6 +9,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../services/cart_service.dart';
 import '../models/listing.dart';
 import 'cart_payment_screen.dart';
+import '../theme/app_theme.dart';
 
 class CartScreen extends StatelessWidget {
   const CartScreen({super.key});
@@ -22,20 +23,17 @@ class CartScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade50,
+      backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.white,
-        title: const Text(
+        backgroundColor: AppTheme.cardColor,
+        title: Text(
           'Your Cart',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.black87,
-          ),
+          style: AppTheme.heading3.copyWith(color: AppTheme.darkText),
         ),
-        iconTheme: const IconThemeData(color: Colors.black87),
+        iconTheme: const IconThemeData(color: AppTheme.darkText),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black87),
+          icon: const Icon(Icons.arrow_back_rounded, color: AppTheme.darkText),
           onPressed: () => _navigateToHome(context),
         ),
       ),
@@ -249,15 +247,15 @@ class _CartScreenContentState extends State<CartScreenContent> {
   Widget _buildCartHeader() {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-      color: Colors.white,
+      color: AppTheme.cardColor,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             '$_totalItemCount ${_totalItemCount == 1 ? 'item' : 'items'}${_sellerName != null ? ' from $_sellerName' : ''}',
-            style: TextStyle(
+            style: AppTheme.bodyMedium.copyWith(
               fontSize: 14,
-              color: Colors.grey.shade600,
+              color: AppTheme.lightText,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -273,17 +271,7 @@ class _CartScreenContentState extends State<CartScreenContent> {
     final maxQuantity = listing?.quantity ?? item.quantity;
 
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+      decoration: AppTheme.getCardDecoration(elevated: true),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Row(
@@ -291,11 +279,11 @@ class _CartScreenContentState extends State<CartScreenContent> {
           children: [
             // Product Image
             ClipRRect(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(14),
               child: Container(
                 width: 80,
                 height: 80,
-                color: Colors.grey.shade200,
+                color: AppTheme.backgroundColorAlt,
                 child: item.imagePath != null
                     ? (kIsWeb
                         ? FutureBuilder<Uint8List>(
@@ -315,8 +303,8 @@ class _CartScreenContentState extends State<CartScreenContent> {
                                 File(item.imagePath!),
                                 fit: BoxFit.cover,
                               )
-                            : const Icon(Icons.image_not_supported, color: Colors.grey))
-                    : const Icon(Icons.image_not_supported, color: Colors.grey),
+                            : Icon(Icons.image_not_supported_rounded, color: AppTheme.disabledText))
+                    : Icon(Icons.image_not_supported_rounded, color: AppTheme.disabledText),
               ),
             ),
             const SizedBox(width: 12),
@@ -329,70 +317,70 @@ class _CartScreenContentState extends State<CartScreenContent> {
                   // Product Name
                   Text(
                     item.name,
-                    style: const TextStyle(
+                    style: AppTheme.heading3.copyWith(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: Colors.black87,
+                      color: AppTheme.darkText,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
 
                   // Variant/Pack Size
                   if (item.selectedPackSize != null && item.measurementUnitLabel != null)
                     Text(
                       item.selectedPackSize!.getDisplayLabel(item.measurementUnitLabel!),
-                      style: TextStyle(
+                      style: AppTheme.bodySmall.copyWith(
                         fontSize: 13,
-                        color: Colors.grey.shade600,
+                        color: AppTheme.lightText,
                         fontWeight: FontWeight.w500,
                       ),
                     )
                   else if (item.measurementUnitLabel != null)
                     Text(
                       'Per ${item.measurementUnitLabel}',
-                      style: TextStyle(
+                      style: AppTheme.bodySmall.copyWith(
                         fontSize: 13,
-                        color: Colors.grey.shade600,
+                        color: AppTheme.lightText,
                       ),
                     ),
 
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
 
                   // Price per unit
                   Row(
                     children: [
                       Text(
                         '₹${item.price.toStringAsFixed(0)}',
-                        style: const TextStyle(
+                        style: AppTheme.heading3.copyWith(
                           fontSize: 15,
                           fontWeight: FontWeight.bold,
-                          color: Colors.black87,
+                          color: AppTheme.darkText,
                         ),
                       ),
                       if (item.originalPrice != null && item.originalPrice! > item.price) ...[
                         const SizedBox(width: 8),
                         Text(
                           '₹${item.originalPrice!.toStringAsFixed(0)}',
-                          style: TextStyle(
+                          style: AppTheme.bodySmall.copyWith(
                             fontSize: 13,
-                            color: Colors.grey.shade500,
+                            color: AppTheme.disabledText,
                             decoration: TextDecoration.lineThrough,
                           ),
                         ),
-                        const SizedBox(width: 4),
+                        const SizedBox(width: 6),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                           decoration: BoxDecoration(
-                            color: Colors.green.shade50,
-                            borderRadius: BorderRadius.circular(4),
+                            gradient: AppTheme.successGradient,
+                            borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
                             '${(((item.originalPrice! - item.price) / item.originalPrice!) * 100).toStringAsFixed(0)}% off',
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 10,
-                              color: Colors.green.shade700,
+                              color: Colors.white,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -404,16 +392,16 @@ class _CartScreenContentState extends State<CartScreenContent> {
                   // Stock Warning
                   if (isLowStock && !isOutOfStock)
                     Padding(
-                      padding: const EdgeInsets.only(top: 4),
+                      padding: const EdgeInsets.only(top: 6),
                       child: Row(
                         children: [
-                          Icon(Icons.warning_amber_rounded, size: 14, color: Colors.orange.shade700),
+                          Icon(Icons.warning_amber_rounded, size: 14, color: AppTheme.warningColor),
                           const SizedBox(width: 4),
                           Text(
                             'Only $maxQuantity left',
-                            style: TextStyle(
+                            style: AppTheme.bodySmall.copyWith(
                               fontSize: 11,
-                              color: Colors.orange.shade700,
+                              color: AppTheme.warningColor,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -422,16 +410,16 @@ class _CartScreenContentState extends State<CartScreenContent> {
                     )
                   else if (isOutOfStock)
                     Padding(
-                      padding: const EdgeInsets.only(top: 4),
+                      padding: const EdgeInsets.only(top: 6),
                       child: Row(
                         children: [
-                          Icon(Icons.error_outline, size: 14, color: Colors.red.shade700),
+                          Icon(Icons.error_outline_rounded, size: 14, color: AppTheme.errorColor),
                           const SizedBox(width: 4),
                           Text(
                             'Out of stock',
-                            style: TextStyle(
+                            style: AppTheme.bodySmall.copyWith(
                               fontSize: 11,
-                              color: Colors.red.shade700,
+                              color: AppTheme.errorColor,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -439,7 +427,7 @@ class _CartScreenContentState extends State<CartScreenContent> {
                       ),
                     ),
 
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
 
                   // Quantity Control & Subtotal Row
                   Row(
@@ -448,39 +436,62 @@ class _CartScreenContentState extends State<CartScreenContent> {
                       // Quantity Control
                       Container(
                         decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey.shade300),
-                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppTheme.borderColor),
+                          borderRadius: BorderRadius.circular(12),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            IconButton(
-                              icon: const Icon(Icons.remove, size: 18),
-                              onPressed: item.quantity > 1
-                                  ? () => _updateQuantity(item, item.quantity - 1)
-                                  : null,
-                              padding: const EdgeInsets.all(8),
-                              constraints: const BoxConstraints(),
-                              color: item.quantity > 1 ? Colors.black87 : Colors.grey,
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12),
-                              child: Text(
-                                '${item.quantity}',
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.bold,
+                            Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: item.quantity > 1
+                                    ? () => _updateQuantity(item, item.quantity - 1)
+                                    : null,
+                                borderRadius: const BorderRadius.only(
+                                  topLeft: Radius.circular(12),
+                                  bottomLeft: Radius.circular(12),
+                                ),
+                                child: Container(
+                                  padding: const EdgeInsets.all(8),
+                                  child: Icon(
+                                    Icons.remove_rounded,
+                                    size: 18,
+                                    color: item.quantity > 1 ? AppTheme.darkText : AppTheme.disabledText,
+                                  ),
                                 ),
                               ),
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.add, size: 18),
-                              onPressed: item.quantity < maxQuantity
-                                  ? () => _updateQuantity(item, item.quantity + 1)
-                                  : null,
-                              padding: const EdgeInsets.all(8),
-                              constraints: const BoxConstraints(),
-                              color: item.quantity < maxQuantity ? Colors.black87 : Colors.grey,
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14),
+                              child: Text(
+                                '${item.quantity}',
+                                style: AppTheme.heading3.copyWith(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.darkText,
+                                ),
+                              ),
+                            ),
+                            Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: item.quantity < maxQuantity
+                                    ? () => _updateQuantity(item, item.quantity + 1)
+                                    : null,
+                                borderRadius: const BorderRadius.only(
+                                  topRight: Radius.circular(12),
+                                  bottomRight: Radius.circular(12),
+                                ),
+                                child: Container(
+                                  padding: const EdgeInsets.all(8),
+                                  child: Icon(
+                                    Icons.add_rounded,
+                                    size: 18,
+                                    color: item.quantity < maxQuantity ? AppTheme.darkText : AppTheme.disabledText,
+                                  ),
+                                ),
+                              ),
                             ),
                           ],
                         ),
@@ -489,10 +500,10 @@ class _CartScreenContentState extends State<CartScreenContent> {
                       // Subtotal
                       Text(
                         '₹${item.total.toStringAsFixed(0)}',
-                        style: const TextStyle(
+                        style: AppTheme.heading2.copyWith(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: Colors.black87,
+                          color: AppTheme.darkText,
                         ),
                       ),
                     ],
@@ -504,10 +515,20 @@ class _CartScreenContentState extends State<CartScreenContent> {
             const SizedBox(width: 8),
 
             // Remove Button
-            IconButton(
-              icon: Icon(Icons.delete_outline, color: Colors.grey.shade600),
-              onPressed: () => _removeItem(context, item),
-              tooltip: 'Remove item',
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => _removeItem(context, item),
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  child: Icon(
+                    Icons.delete_outline_rounded,
+                    color: AppTheme.errorColor,
+                    size: 22,
+                  ),
+                ),
+              ),
             ),
           ],
         ),
@@ -518,43 +539,43 @@ class _CartScreenContentState extends State<CartScreenContent> {
   Widget _buildPriceSummary() {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.cardColor,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 20,
+            offset: const Offset(0, -4),
+            spreadRadius: 0,
           ),
         ],
       ),
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               // Savings Info
               if (_savings > 0)
                 Container(
-                  padding: const EdgeInsets.all(12),
-                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(14),
+                  margin: const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
-                    color: Colors.green.shade50,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.green.shade200),
+                    gradient: AppTheme.successGradient,
+                    borderRadius: BorderRadius.circular(14),
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.local_offer, color: Colors.green.shade700, size: 20),
-                      const SizedBox(width: 8),
+                      const Icon(Icons.local_offer_rounded, color: Colors.white, size: 22),
+                      const SizedBox(width: 10),
                       Expanded(
                         child: Text(
                           'You saved ₹${_savings.toStringAsFixed(0)}',
-                          style: TextStyle(
-                            fontSize: 14,
+                          style: const TextStyle(
+                            fontSize: 15,
                             fontWeight: FontWeight.w600,
-                            color: Colors.green.shade700,
+                            color: Colors.white,
                           ),
                         ),
                       ),
@@ -568,75 +589,85 @@ class _CartScreenContentState extends State<CartScreenContent> {
                 children: [
                   Text(
                     'Item Total',
-                    style: TextStyle(
+                    style: AppTheme.bodyMedium.copyWith(
                       fontSize: 15,
-                      color: Colors.grey.shade700,
+                      color: AppTheme.lightText,
                     ),
                   ),
                   Text(
                     '₹${_subtotal.toStringAsFixed(0)}',
-                    style: TextStyle(
+                    style: AppTheme.bodyMedium.copyWith(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
-                      color: Colors.grey.shade700,
+                      color: AppTheme.lightText,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              const Divider(),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
+              Divider(height: 1, color: AppTheme.borderColor.withOpacity(0.5)),
+              const SizedBox(height: 12),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
+                  Text(
                     'Grand Total',
-                    style: TextStyle(
+                    style: AppTheme.heading2.copyWith(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: Colors.black87,
+                      color: AppTheme.darkText,
                     ),
                   ),
                   Text(
                     '₹${_total.toStringAsFixed(0)}',
-                    style: const TextStyle(
+                    style: AppTheme.heading2.copyWith(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: Colors.black87,
+                      color: AppTheme.darkText,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
 
               // Checkout Button
               SizedBox(
                 width: double.infinity,
-                height: 52,
+                height: 56,
                 child: ElevatedButton(
                   onPressed: _isLoading || _items.isEmpty ? null : _checkout,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange,
+                    backgroundColor: AppTheme.primaryColor,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(16),
                     ),
-                    elevation: 2,
+                    elevation: 0,
+                  ).copyWith(
+                    backgroundColor: MaterialStateProperty.resolveWith<Color>(
+                      (Set<MaterialState> states) {
+                        if (states.contains(MaterialState.disabled)) {
+                          return AppTheme.disabledText;
+                        }
+                        return AppTheme.primaryColor;
+                      },
+                    ),
                   ),
                   child: _isLoading
                       ? const SizedBox(
                           height: 24,
                           width: 24,
                           child: CircularProgressIndicator(
-                            strokeWidth: 2,
+                            strokeWidth: 2.5,
                             valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                           ),
                         )
-                      : const Text(
+                      : Text(
                           'Proceed to Checkout',
-                          style: TextStyle(
+                          style: AppTheme.heading3.copyWith(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
+                            color: Colors.white,
                           ),
                         ),
                 ),
@@ -662,44 +693,45 @@ class _CartScreenContentState extends State<CartScreenContent> {
             Container(
               padding: const EdgeInsets.all(32),
               decoration: BoxDecoration(
-                color: Colors.grey.shade100,
+                color: AppTheme.backgroundColorAlt,
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 Icons.shopping_cart_outlined,
                 size: 80,
-                color: Colors.grey.shade400,
+                color: AppTheme.disabledText,
               ),
             ),
             const SizedBox(height: 24),
-            const Text(
+            Text(
               'Your cart is empty',
-              style: TextStyle(
+              style: AppTheme.heading2.copyWith(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
-                color: Colors.black87,
+                color: AppTheme.darkText,
               ),
             ),
             const SizedBox(height: 8),
             Text(
               'Add items to start your order',
-              style: TextStyle(
+              style: AppTheme.bodyMedium.copyWith(
                 fontSize: 16,
-                color: Colors.grey.shade600,
+                color: AppTheme.lightText,
               ),
             ),
             const SizedBox(height: 32),
             ElevatedButton.icon(
               onPressed: () => CartScreen._navigateToHome(context),
-              icon: const Icon(Icons.store),
+              icon: const Icon(Icons.store_rounded),
               label: const Text('Browse Items'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
+                backgroundColor: AppTheme.primaryColor,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(16),
                 ),
+                elevation: 0,
               ),
             ),
           ],
