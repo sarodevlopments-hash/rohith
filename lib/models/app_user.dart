@@ -25,6 +25,9 @@ class AppUser extends HiveObject {
   @HiveField(6)
   final bool isRegistered; // True after first-time registration
 
+  @HiveField(7)
+  final String? role; // 'owner', 'buyer', 'seller', or null (default buyer)
+
   AppUser({
     required this.uid,
     required this.fullName,
@@ -33,6 +36,7 @@ class AppUser extends HiveObject {
     required this.createdAt,
     this.lastLoginAt,
     this.isRegistered = false,
+    this.role,
   });
 
   AppUser copyWith({
@@ -43,6 +47,7 @@ class AppUser extends HiveObject {
     DateTime? createdAt,
     DateTime? lastLoginAt,
     bool? isRegistered,
+    String? role,
   }) {
     return AppUser(
       uid: uid ?? this.uid,
@@ -52,7 +57,12 @@ class AppUser extends HiveObject {
       createdAt: createdAt ?? this.createdAt,
       lastLoginAt: lastLoginAt ?? this.lastLoginAt,
       isRegistered: isRegistered ?? this.isRegistered,
+      role: role ?? this.role,
     );
   }
+
+  bool get isOwner => role == 'owner';
+  bool get isSeller => role == 'seller' || role == null; // Default to seller if no role
+  bool get isBuyer => role == 'buyer' || role == null; // Default to buyer if no role
 }
 

@@ -18,6 +18,7 @@ import '../models/measurement_unit.dart';
 import '../models/pack_size.dart';
 import '../models/pending_listing_item.dart';
 import '../models/schedule_type.dart';
+import '../models/grocery_type.dart';
 import '../models/scheduled_listing.dart';
 import '../services/scheduled_listing_service.dart';
 import '../services/product_suggestion_service.dart';
@@ -28,6 +29,7 @@ import '../services/seller_profile_service.dart';
 import '../services/listing_firestore_service.dart';
 import '../services/image_storage_service.dart';
 import 'map_location_picker_screen.dart';
+import 'grocery_onboarding_screen.dart';
 import 'package:hive/hive.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -42,11 +44,13 @@ class AddListingScreen extends StatefulWidget {
   final ValueNotifier<int>? promptCounter;
   final VoidCallback? onBackToDashboard;
   final ItemList? initialItemList; // For loading a saved list
+  final SellType? initialSellType; // For pre-selecting a sell type (e.g., from onboarding)
   const AddListingScreen({
     super.key,
     this.promptCounter,
     this.onBackToDashboard,
     this.initialItemList,
+    this.initialSellType,
   });
 
   @override
@@ -231,6 +235,38 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
       parent: _multiItemCardAnimationController,
       curve: Curves.easeOut,
     ));
+    
+    // Set initial sell type if provided (e.g., from grocery onboarding)
+    if (widget.initialSellType != null) {
+      selectedType = widget.initialSellType!;
+      // Set default measurement unit for groceries/vegetables
+      if (widget.initialSellType == SellType.groceries || 
+          widget.initialSellType == SellType.vegetables) {
+        selectedMeasurementUnit = MeasurementUnit.kilograms; // Force set for grocery mode
+        // Set default category for groceries
+        if (widget.initialSellType == SellType.groceries) {
+          selectedCategory = FoodCategory.veg;
+        }
+      }
+      // Mark type prompt as shown since we're pre-selecting from onboarding
+      _hasShownTypePrompt = true;
+      
+      // Ensure form is visible after frame is built
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && widget.initialSellType == SellType.groceries) {
+          // Scroll to top to show the form fields
+          Future.delayed(const Duration(milliseconds: 300), () {
+            if (_scrollController.hasClients) {
+              _scrollController.animateTo(
+                0,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOut,
+              );
+            }
+          });
+        }
+      });
+    }
     
     _loadSellerProfile();
     _loadSavedItemLists();
@@ -564,9 +600,12 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
         selectedCookedFoodSource = savedProfile.cookedFoodSource;
         print('✅ Loaded food source: ${savedProfile.cookedFoodSource}');
         
-        if (savedProfile.defaultFoodType != null) {
+        // Only load saved default type if NOT coming from onboarding with a pre-set type
+        if (savedProfile.defaultFoodType != null && widget.initialSellType == null) {
           selectedType = savedProfile.defaultFoodType!;
           print('✅ Loaded default type: ${savedProfile.defaultFoodType}');
+        } else if (widget.initialSellType != null) {
+          print('⏭️ Skipping saved default type — using initialSellType: ${widget.initialSellType}');
         }
       }
     }
@@ -598,7 +637,9 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
     final currentFssai = sellerFssaiController.text.trim();
     final needsLocation = currentLocation.isEmpty;
     final needsFssai = selectedType == SellType.cookedFood && currentFssai.isEmpty;
-    final shouldShowForm = needsLocation || needsFssai;
+    // Skip seller profile form for groceries when coming from onboarding (groceries don't need FSSAI, location can be added later)
+    final isGroceriesFromOnboarding = widget.initialSellType == SellType.groceries;
+    final shouldShowForm = (needsLocation || needsFssai) && !isGroceriesFromOnboarding;
 
     print('📋 Form display check:');
     print('   - Location empty: $needsLocation (value: "$currentLocation")');
@@ -774,9 +815,9 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(18),
-                    child: Stack(
+                  child: Stack(
                       fit: StackFit.expand,
-                      children: [
+                    children: [
                         // Full-width background image
                         _typeImagePath(t) != null
                             ? Image.asset(
@@ -862,33 +903,33 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                               mainAxisSize: MainAxisSize.min,
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  _typeTitle(t),
-                                  style: const TextStyle(
+                          Text(
+                            _typeTitle(t),
+                            style: const TextStyle(
                                     fontSize: 17,
-                                    fontWeight: FontWeight.w700,
+                              fontWeight: FontWeight.w700,
                                     color: Colors.white,
                                     letterSpacing: 0.2,
-                                  ),
+                            ),
                                   maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                                 const SizedBox(height: 4),
-                                Text(
-                                  _typeHint(t),
-                                  style: TextStyle(
-                                    fontSize: 12,
+                          Text(
+                            _typeHint(t),
+                            style: TextStyle(
+                              fontSize: 12,
                                     color: Colors.white.withOpacity(0.85),
-                                    height: 1.2,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
+                              height: 1.2,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                             ),
                           ),
-                        ),
-                      ],
+                      ),
+                    ],
                     ),
                   ),
                 ),
@@ -1020,7 +1061,48 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                       width: double.infinity,
                       height: 48,
                       child: ElevatedButton(
-                        onPressed: () => Navigator.of(ctx).pop(tempType),
+                        onPressed: () async {
+                          // If Groceries is selected, check if onboarding is already completed
+                          if (tempType == SellType.groceries) {
+                            Navigator.of(ctx).pop(null); // Close dialog first
+                            
+                            // Check if grocery onboarding is already completed
+                            final hasCompletedOnboarding = sellerProfile?.groceryOnboardingCompleted ?? false;
+                            
+                            if (!hasCompletedOnboarding) {
+                              // First time - show onboarding flow
+                              final result = await Navigator.push<SellType>(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const GroceryOnboardingScreen(),
+                                ),
+                              );
+                              
+                              // If onboarding completed, apply the grocery type
+                              if (result == SellType.groceries && mounted) {
+                                // Reload seller profile to get updated data
+                                await _loadSellerProfile();
+                                _applySelectedType(SellType.groceries);
+                                // Set grocery defaults
+                                setState(() {
+                                  selectedMeasurementUnit = MeasurementUnit.kilograms;
+                                  selectedCategory = FoodCategory.veg;
+                                });
+                              }
+                            } else {
+                              // Already completed onboarding - just apply the type
+                              _applySelectedType(SellType.groceries);
+                              // Set grocery defaults
+                              setState(() {
+                                selectedMeasurementUnit = MeasurementUnit.kilograms;
+                                selectedCategory = FoodCategory.veg;
+                              });
+                            }
+                          } else {
+                            // For other types, return the selected type normally
+                            Navigator.of(ctx).pop(tempType);
+                          }
+                        },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppTheme.primaryColor,
                           foregroundColor: Colors.white,
@@ -1615,7 +1697,7 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
     print('   - Type: ${profile.defaultFoodType}');
     
     try {
-      await SellerProfileService.saveProfile(profile);
+    await SellerProfileService.saveProfile(profile);
       print('✅ Seller profile saved successfully');
     } catch (e) {
       print('❌ Error saving seller profile: $e');
@@ -1801,6 +1883,37 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
+    // Validate grocery documents (must upload documents before selling groceries)
+    if (selectedType == SellType.groceries) {
+      final hasDocuments = sellerProfile?.groceryDocuments?.isNotEmpty ?? false;
+      if (!hasDocuments) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Please upload required documents before selling groceries'),
+            backgroundColor: AppTheme.errorColor,
+            action: SnackBarAction(
+              label: 'Upload',
+              textColor: Colors.white,
+              onPressed: () async {
+                // Navigate to grocery onboarding
+                final result = await Navigator.push<SellType>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const GroceryOnboardingScreen(),
+                  ),
+                );
+                if (result != null && mounted) {
+                  await _loadSellerProfile();
+                  setState(() {});
+                }
+              },
+            ),
+          ),
+        );
+        return;
+      }
+    }
+
     // Validate product image (for clothing, allow default color image instead)
     if (productImagePath == null) {
       if (selectedType == SellType.clothingAndApparel && defaultColorImage != null && colorImagePaths.containsKey(defaultColorImage)) {
@@ -1848,12 +1961,12 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
           }
           return;
         }
-        // Validate all pack sizes have valid quantity and price
+        // Validate all pack sizes have valid quantity, price, and stock
         for (var packSize in packSizes) {
-          if (packSize.quantity <= 0 || packSize.price <= 0) {
+          if (packSize.quantity <= 0 || packSize.price <= 0 || packSize.stock <= 0) {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('All pack sizes must have quantity > 0 and price > 0')),
+                const SnackBar(content: Text('All pack sizes must have quantity > 0, price > 0, and stock > 0')),
               );
             }
             return;
@@ -1865,17 +1978,24 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
       List<PackSize>? finalPackSizes;
       if (selectedType == SellType.groceries && !useMultiplePackSizes && packSizeWeightController.text.isNotEmpty) {
         final packWeight = double.tryParse(packSizeWeightController.text) ?? 0.0;
-        if (packWeight > 0) {
+        final stockCount = int.tryParse(quantityController.text) ?? 0;
+        if (packWeight > 0 && stockCount > 0) {
           finalPackSizes = [
             PackSize(
               quantity: packWeight,
               price: double.parse(priceController.text),
+              stock: stockCount,
             )
           ];
         }
       } else if (selectedType == SellType.groceries && useMultiplePackSizes && packSizes.isNotEmpty) {
         finalPackSizes = packSizes;
       }
+      
+      // Calculate total stock for multiple pack sizes
+      final totalStock = (selectedType == SellType.groceries && useMultiplePackSizes && packSizes.isNotEmpty)
+          ? packSizes.fold<int>(0, (sum, pack) => sum + pack.stock)
+          : int.parse(quantityController.text);
       
       final listing = Listing(
         name: nameController.text.trim(),
@@ -1886,8 +2006,8 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
         originalPrice: originalPriceController.text.isEmpty
             ? null
             : double.parse(originalPriceController.text),
-        quantity: int.parse(quantityController.text), // Always use quantityController for stock count
-        initialQuantity: int.parse(quantityController.text), // Stock count
+        quantity: totalStock, // Use calculated total stock
+        initialQuantity: totalStock, // Use calculated total stock
         sellerId: currentSellerId,
         type: selectedType,
         fssaiLicense: (selectedType == SellType.cookedFood || selectedType == SellType.liveKitchen)
@@ -2343,6 +2463,348 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
     );
   }
 
+  Widget _buildGroceryRegistrationInfoCard() {
+    // Safety check - return empty container if seller profile is not loaded
+    if (sellerProfile == null) {
+      return const SizedBox.shrink();
+    }
+
+    final groceryType = sellerProfile!.groceryTypeEnum;
+    final sellerType = sellerProfile!.sellerTypeEnum;
+    final hasDocuments = (sellerProfile!.groceryDocuments?.isNotEmpty ?? false);
+    
+    // Determine badge and color based on document upload status
+    String badgeText = 'Pending Verification';
+    Color badgeColor = AppTheme.warningColor; // Amber/Warning color for pending
+    IconData badgeIcon = Icons.pending;
+    
+    if (hasDocuments) {
+      // Only show verified status if documents are uploaded
+      if (groceryType == GroceryType.freshProduce) {
+        if (sellerType == SellerType.farmer) {
+          badgeText = 'Verified Farmer';
+          badgeColor = const Color(0xFF50C878); // Soft green
+          badgeIcon = Icons.check_circle;
+        } else {
+          badgeText = 'Verified Seller';
+          badgeColor = const Color(0xFFFFA726); // Amber
+          badgeIcon = Icons.verified_user;
+        }
+      } else if (groceryType == GroceryType.packagedGroceries) {
+        badgeText = 'Compliance Verified';
+        badgeColor = AppTheme.primaryColor; // Teal
+        badgeIcon = Icons.admin_panel_settings;
+      }
+    }
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            badgeColor.withOpacity(0.08),
+            badgeColor.withOpacity(0.03),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: badgeColor.withOpacity(0.3),
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: badgeColor.withOpacity(0.15),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header with badge
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: badgeColor.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    badgeIcon,
+                    color: badgeColor,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Registration Details',
+                        style: AppTheme.heading4.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.darkText,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: badgeColor.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          badgeText,
+                          style: AppTheme.bodySmall.copyWith(
+                            color: badgeColor,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Edit button
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () async {
+                      // Navigate to grocery onboarding to edit
+                      final result = await Navigator.push<SellType>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const GroceryOnboardingScreen(),
+                        ),
+                      );
+                      
+                      // Reload seller profile after editing
+                      if (result != null && mounted) {
+                        await _loadSellerProfile();
+                        setState(() {});
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: badgeColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        Icons.edit,
+                        color: badgeColor,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Registration details
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.7),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: badgeColor.withOpacity(0.2),
+                  width: 1,
+                ),
+              ),
+              child: Column(
+                children: [
+                  // Grocery Type
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.category,
+                        size: 18,
+                        color: Colors.grey.shade600,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Category',
+                              style: AppTheme.bodySmall.copyWith(
+                                color: Colors.grey.shade600,
+                                fontSize: 11,
+                              ),
+                            ),
+                            Text(
+                              groceryType?.displayName ?? 'Not set',
+                              style: AppTheme.bodyMedium.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.darkText,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  
+                  // Seller Type (only for fresh produce)
+                  if (groceryType == GroceryType.freshProduce && sellerType != null) ...[
+                    const SizedBox(height: 12),
+                    Divider(height: 1, color: Colors.grey.shade300),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.person,
+                          size: 18,
+                          color: Colors.grey.shade600,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Seller Type',
+                                style: AppTheme.bodySmall.copyWith(
+                                  color: Colors.grey.shade600,
+                                  fontSize: 11,
+                                ),
+                              ),
+                              Text(
+                                sellerType == SellerType.farmer ? 'Farmer / Producer' : 'Reseller / Trader',
+                                style: AppTheme.bodyMedium.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.darkText,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                  
+                  // Documents status
+                  const SizedBox(height: 12),
+                  Divider(height: 1, color: Colors.grey.shade300),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.description,
+                        size: 18,
+                        color: hasDocuments ? Colors.grey.shade600 : AppTheme.errorColor,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Documents',
+                              style: AppTheme.bodySmall.copyWith(
+                                color: Colors.grey.shade600,
+                                fontSize: 11,
+                              ),
+                            ),
+                            Text(
+                              hasDocuments 
+                                ? '${sellerProfile!.groceryDocuments!.length} uploaded'
+                                : 'No documents uploaded',
+                              style: AppTheme.bodyMedium.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: hasDocuments ? AppTheme.successColor : AppTheme.errorColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(
+                        hasDocuments ? Icons.check_circle : Icons.warning,
+                        size: 18,
+                        color: hasDocuments ? AppTheme.successColor : AppTheme.errorColor,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            
+            const SizedBox(height: 12),
+            
+            // Warning or Helper text based on document status
+            if (!hasDocuments) ...[
+              // Warning banner when no documents
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.errorColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: AppTheme.errorColor.withOpacity(0.3),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      size: 16,
+                      color: AppTheme.errorColor,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Upload documents to start selling groceries',
+                        style: AppTheme.bodySmall.copyWith(
+                          color: AppTheme.errorColor,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ] else ...[
+              // Helper text when documents are uploaded
+              Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    size: 14,
+                    color: Colors.grey.shade500,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Tap the edit icon to update your documents or change seller type',
+                      style: AppTheme.bodySmall.copyWith(
+                        color: Colors.grey.shade600,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildModernTextField({
     required TextEditingController controller,
     required String label,
@@ -2492,7 +2954,7 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(
+            decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -2515,12 +2977,12 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
             color: Colors.transparent,
             child: InkWell(
               onTap: () {
-                if (widget.onBackToDashboard != null) {
-                  widget.onBackToDashboard!();
-                } else {
-                  Navigator.pop(context);
-                }
-              },
+            if (widget.onBackToDashboard != null) {
+              widget.onBackToDashboard!();
+            } else {
+              Navigator.pop(context);
+            }
+          },
               borderRadius: BorderRadius.circular(14),
               child: Container(
                 padding: const EdgeInsets.all(10),
@@ -2585,12 +3047,12 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      "Start Selling",
-                      style: TextStyle(
+          children: [
+            Text(
+              "Start Selling",
+              style: TextStyle(
                         fontWeight: FontWeight.w800,
                         color: Colors.grey.shade900,
                         fontSize: 23,
@@ -2599,17 +3061,17 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      "List your products",
-                      style: TextStyle(
+            Text(
+              "List your products",
+              style: TextStyle(
                         fontSize: 13,
-                        color: Colors.grey.shade600,
+                color: Colors.grey.shade600,
                         fontWeight: FontWeight.w500,
                         letterSpacing: 0.1,
-                      ),
-                    ),
-                  ],
-                ),
+              ),
+            ),
+          ],
+        ),
               ),
             ],
           ),
@@ -2630,10 +3092,10 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                   borderRadius: BorderRadius.circular(14),
                   child: Container(
                     padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                         colors: [
                           AppTheme.primaryColor,
                           AppTheme.primaryColor.withOpacity(0.85),
@@ -2686,10 +3148,10 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
         child: Column(
           children: [
             Expanded(
-              child: ListView(
-                controller: _scrollController,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                children: [
+        child: ListView(
+          controller: _scrollController,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          children: [
             // Pending Items List (when in multi-item mode)
             if (isMultiItemMode && pendingItems.isNotEmpty) ...[
               _buildSectionTitle(
@@ -2731,6 +3193,12 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                   ),
                 );
               }),
+              const SizedBox(height: 16),
+            ],
+
+            // Grocery Registration Info Card (shows when groceries is selected)
+            if (selectedType == SellType.groceries && sellerProfile != null) ...[
+              _buildGroceryRegistrationInfoCard(),
               const SizedBox(height: 16),
             ],
 
@@ -2783,7 +3251,7 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                 ),
               const SizedBox(height: 16),
             ],
-            
+
             // Previous Items Selection
             if (sellerProfile != null) ...[
               _buildSectionTitle("Quick Post", icon: Icons.history, iconColor: Colors.blue),
@@ -2850,7 +3318,7 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
                             color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(12),
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.purple.withOpacity(0.1),
@@ -2865,14 +3333,14 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                             size: 24,
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
                                 isFirstTimeSeller ? "Seller Information" : "Update Seller Information",
-                                style: TextStyle(
+                                        style: TextStyle(
                                   fontSize: 20,
                                   fontWeight: FontWeight.w700,
                                   color: Colors.grey.shade900,
@@ -2880,17 +3348,17 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                                 ),
                               ),
                               const SizedBox(height: 4),
-                              Text(
+                                        Text(
                                 "Tell us about your business to start selling",
-                                style: TextStyle(
+                                          style: TextStyle(
                                   fontSize: 13,
-                                  color: Colors.grey.shade600,
+                                            color: Colors.grey.shade600,
                                   fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
                       ],
                     ),
                     const SizedBox(height: 16),
@@ -2923,9 +3391,9 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                               minHeight: 6,
                             ),
                           ),
-                        ),
-                      ],
-                    ),
+                                  ),
+                              ],
+                            ),
                   ],
                 ),
               ),
@@ -2998,7 +3466,7 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                         iconColor: Colors.green.shade600,
                         validator: (v) => v?.isEmpty ?? true ? "Required" : null,
                       ),
-                      const SizedBox(height: 16),
+                    const SizedBox(height: 16),
                       // FSSAI Document Upload
                       _buildDocumentUploadCard(),
                       const SizedBox(height: 20),
@@ -3033,19 +3501,19 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                       icon: Icons.location_on_rounded,
                       iconColor: Colors.red.shade600,
                       maxLines: 2,
-                      suffixIcon: Padding(
-                        padding: const EdgeInsets.only(right: 6),
-                        child: isFetchingLocation
-                            ? const SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : IconButton(
+                        suffixIcon: Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: isFetchingLocation
+                              ? const SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : IconButton(
                                 icon: Icon(Icons.my_location_rounded, color: Colors.red.shade600),
-                                tooltip: "Use current or nearby location",
-                                onPressed: _showLocationPicker,
-                              ),
+                                  tooltip: "Use current or nearby location",
+                                  onPressed: _showLocationPicker,
+                                ),
                       ),
                       validator: (v) => v?.isEmpty ?? true ? "Required" : null,
                     ),
@@ -3284,14 +3752,14 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                   color: Colors.transparent,
                   child: InkWell(
                     onTap: () {
-                      setState(() {
+                        setState(() {
                         isBulkFood = !isBulkFood;
                         if (!isBulkFood) {
-                          servesCountController.clear();
-                          portionDescriptionController.clear();
-                        }
-                      });
-                    },
+                            servesCountController.clear();
+                            portionDescriptionController.clear();
+                          }
+                        });
+                      },
                     borderRadius: BorderRadius.circular(18),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -3301,7 +3769,7 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                           Container(
                             width: 44,
                             height: 44,
-                            decoration: BoxDecoration(
+                        decoration: BoxDecoration(
                               gradient: LinearGradient(
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
@@ -3326,8 +3794,8 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                                   spreadRadius: 0,
                                 ),
                               ],
-                            ),
-                            child: Icon(
+                        ),
+                        child: Icon(
                               Icons.groups_rounded,
                               color: Colors.white,
                               size: 22,
@@ -4122,45 +4590,149 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                     ],
                   ),
                   const SizedBox(height: 16),
-                  // Measurement Unit for groceries/vegetables
+                  // Measurement Unit for groceries/vegetables — Pill-style selector
                   if (selectedType == SellType.vegetables ||
                       selectedType == SellType.groceries) ...[
-                    DropdownButtonFormField<MeasurementUnit>(
-                      value: selectedMeasurementUnit,
-                      decoration: InputDecoration(
-                        labelText: "Measurement Unit *",
-                        prefixIcon: const Icon(Icons.straighten),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                    // Unit Label
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Text(
+                          "Measurement Unit *",
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey.shade700,
+                          ),
                         ),
-                        filled: true,
-                        fillColor: Colors.grey.shade50,
                       ),
-                      items: [
+                    ),
+                    // Pill-style unit buttons
+                    Row(
+                      children: [
                         MeasurementUnit.kilograms,
                         MeasurementUnit.grams,
                         MeasurementUnit.liters,
+                        MeasurementUnit.pieces,
                       ].map((unit) {
-                        return DropdownMenuItem(
-                          value: unit,
-                          child: Text(unit.label),
+                        final isSelected = selectedMeasurementUnit == unit;
+                        return Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.only(
+                              right: unit != MeasurementUnit.pieces ? 8 : 0,
+                            ),
+                            child: GestureDetector(
+                              onTap: () => setState(() => selectedMeasurementUnit = unit),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? AppTheme.primaryColor
+                                      : Colors.grey.shade50,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? AppTheme.primaryColor
+                                        : Colors.grey.shade300,
+                                    width: isSelected ? 2 : 1,
+                                  ),
+                                  boxShadow: isSelected
+                                      ? [
+                                          BoxShadow(
+                                            color: AppTheme.primaryColor.withOpacity(0.3),
+                                            blurRadius: 8,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ]
+                                      : [],
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      unit == MeasurementUnit.kilograms
+                                          ? Icons.scale_rounded
+                                          : unit == MeasurementUnit.grams
+                                              ? Icons.monitor_weight_outlined
+                                              : unit == MeasurementUnit.liters
+                                                  ? Icons.water_drop_rounded
+                                                  : Icons.grid_view_rounded,
+                                      size: 20,
+                                      color: isSelected
+                                          ? Colors.white
+                                          : Colors.grey.shade600,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      unit.shortLabel,
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700,
+                                        color: isSelected
+                                            ? Colors.white
+                                            : Colors.grey.shade700,
+                                      ),
+                                    ),
+                                    Text(
+                                      unit == MeasurementUnit.kilograms
+                                          ? 'Kilos'
+                                          : unit == MeasurementUnit.grams
+                                              ? 'Grams'
+                                              : unit == MeasurementUnit.liters
+                                                  ? 'Liters'
+                                                  : 'Pieces',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w500,
+                                        color: isSelected
+                                            ? Colors.white.withOpacity(0.8)
+                                            : Colors.grey.shade500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
                         );
                       }).toList(),
-                      onChanged: (v) => setState(() => selectedMeasurementUnit = v),
-                      validator: (v) => v == null ? "Required" : null,
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 20),
+
                     // Multiple pack sizes option for groceries
                     if (selectedType == SellType.groceries) ...[
-                      SwitchListTile(
-                        title: const Text('Multiple Pack Sizes'),
-                        subtitle: const Text('Sell in different pack sizes (e.g., 5kg, 250gm)'),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: SwitchListTile(
+                          title: Text(
+                            'Multiple Pack Sizes',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 15,
+                              color: Colors.grey.shade800,
+                            ),
+                          ),
+                          subtitle: Text(
+                            'Sell in different pack sizes (e.g., 5kg, 250gm)',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade500,
+                            ),
+                          ),
                         value: useMultiplePackSizes,
+                          activeColor: AppTheme.primaryColor,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 8),
                         onChanged: (value) {
                           setState(() {
                             useMultiplePackSizes = value;
                             if (value && packSizes.isEmpty) {
-                              // Add a default pack size
                               packSizes.add(PackSize(quantity: 1.0, price: 0.0));
                             } else if (!value) {
                               packSizes.clear();
@@ -4168,122 +4740,308 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                           });
                         },
                       ),
+                      ),
+                      const SizedBox(height: 16),
+
                       if (useMultiplePackSizes) ...[
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Add different pack sizes with different prices:',
-                          style: TextStyle(fontWeight: FontWeight.w600),
+                        // Pack sizes header
+                        Row(
+                          children: [
+                            Icon(Icons.inventory_2_rounded, size: 18, color: AppTheme.primaryColor),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Pack Sizes',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 15,
+                                color: Colors.grey.shade800,
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              '${packSizes.length} pack${packSizes.length != 1 ? 's' : ''}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.grey.shade500,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 12),
+                        // Pack size cards
                         ...packSizes.asMap().entries.map((entry) {
                           final index = entry.key;
                           final packSize = entry.value;
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            child: Padding(
-                              padding: const EdgeInsets.all(12.0),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    flex: 2,
-                                    child: TextFormField(
-                                      initialValue: packSize.quantity.toString(),
-                                      keyboardType: TextInputType.numberWithOptions(decimal: true),
-                                      decoration: InputDecoration(
-                                        labelText: 'Quantity',
-                                        hintText: 'e.g., 5.0',
-                                        suffixText: selectedMeasurementUnit?.shortLabel ?? '',
-                                        border: const OutlineInputBorder(),
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: Colors.grey.shade200),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.03),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Pack header with delete
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.primaryColor.withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(8),
                                       ),
-                                      onChanged: (value) {
-                                        final qty = double.tryParse(value) ?? 0.0;
-                                        setState(() {
-                                          packSizes[index] = PackSize(
-                                            quantity: qty,
-                                            price: packSizes[index].price,
-                                            label: packSizes[index].label,
-                                          );
-                                        });
-                                      },
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    flex: 2,
-                                    child: TextFormField(
-                                      initialValue: packSize.price.toString(),
-                                      keyboardType: TextInputType.numberWithOptions(decimal: true),
-                                      decoration: const InputDecoration(
-                                        labelText: 'Price (₹)',
-                                        hintText: 'e.g., 100',
-                                        prefixText: '₹',
-                                        border: OutlineInputBorder(),
+                                      child: Text(
+                                        'Pack ${index + 1}',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppTheme.primaryColor,
+                                        ),
                                       ),
-                                      onChanged: (value) {
-                                        final price = double.tryParse(value) ?? 0.0;
-                                        setState(() {
-                                          packSizes[index] = PackSize(
-                                            quantity: packSizes[index].quantity,
-                                            price: price,
-                                            label: packSizes[index].label,
-                                          );
-                                        });
-                                      },
                                     ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    flex: 2,
-                                    child: TextFormField(
-                                      initialValue: packSize.label ?? '',
-                                      decoration: InputDecoration(
-                                        labelText: 'Label (Optional)',
-                                        hintText: 'e.g., 5kg Pack',
-                                        border: const OutlineInputBorder(),
+                                    const Spacer(),
+                                    if (packSizes.length > 1)
+                                      InkWell(
+                                        onTap: () {
+                                          setState(() {
+                                            packSizes.removeAt(index);
+                                            if (packSizes.isEmpty) {
+                                              useMultiplePackSizes = false;
+                                            }
+                                          });
+                                        },
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: Container(
+                                          padding: const EdgeInsets.all(6),
+                                          decoration: BoxDecoration(
+                                            color: Colors.red.shade50,
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: Icon(Icons.delete_outline, color: Colors.red.shade400, size: 18),
+                                        ),
                                       ),
-                                      onChanged: (value) {
-                                        setState(() {
-                                          packSizes[index] = PackSize(
-                                            quantity: packSizes[index].quantity,
-                                            price: packSizes[index].price,
-                                            label: value.isEmpty ? null : value,
-                                          );
-                                        });
-                                      },
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                // Weight & Price row
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextFormField(
+                                        initialValue: packSize.quantity > 0 ? packSize.quantity.toString() : '',
+                                        keyboardType: TextInputType.numberWithOptions(decimal: true),
+                                        decoration: InputDecoration(
+                                          labelText: 'Weight',
+                                          hintText: 'e.g., 5',
+                                          suffixText: selectedMeasurementUnit?.shortLabel ?? 'kg',
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(10),
+                                          ),
+                                          filled: true,
+                                          fillColor: Colors.grey.shade50,
+                                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                                        ),
+                                        onChanged: (value) {
+                                          final qty = double.tryParse(value) ?? 0.0;
+                                          setState(() {
+                                            packSizes[index] = PackSize(
+                                              quantity: qty,
+                                              price: packSizes[index].price,
+                                              label: packSizes[index].label,
+                                              stock: packSizes[index].stock,
+                                            );
+                                          });
+                                        },
+                                      ),
                                     ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: TextFormField(
+                                        initialValue: packSize.price > 0 ? packSize.price.toString() : '',
+                                        keyboardType: TextInputType.numberWithOptions(decimal: true),
+                                        decoration: InputDecoration(
+                                          labelText: 'Price',
+                                          hintText: 'e.g., 100',
+                                          prefixText: '₹ ',
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(10),
+                                          ),
+                                          filled: true,
+                                          fillColor: Colors.grey.shade50,
+                                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                                        ),
+                                        onChanged: (value) {
+                                          final price = double.tryParse(value) ?? 0.0;
+                                          setState(() {
+                                            packSizes[index] = PackSize(
+                                              quantity: packSizes[index].quantity,
+                                              price: price,
+                                              label: packSizes[index].label,
+                                              stock: packSizes[index].stock,
+                                            );
+                                          });
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                // Stock field
+                                TextFormField(
+                                  initialValue: packSize.stock > 0 ? packSize.stock.toString() : '',
+                                  keyboardType: TextInputType.number,
+                                  decoration: InputDecoration(
+                                    labelText: 'Stock (Number of Packs)',
+                                    hintText: 'e.g., 100',
+                                    prefixIcon: const Icon(Icons.inventory_2),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    filled: true,
+                                    fillColor: Colors.grey.shade50,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
                                   ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete, color: Colors.red),
-                                    onPressed: () {
-                                      setState(() {
-                                        packSizes.removeAt(index);
-                                        if (packSizes.isEmpty) {
-                                          useMultiplePackSizes = false;
-                                        }
-                                      });
-                                    },
+                                  onChanged: (value) {
+                                    final stock = int.tryParse(value) ?? 0;
+                                    setState(() {
+                                      packSizes[index] = PackSize(
+                                        quantity: packSizes[index].quantity,
+                                        price: packSizes[index].price,
+                                        label: packSizes[index].label,
+                                        stock: stock,
+                                      );
+                                    });
+                                  },
+                                ),
+                                const SizedBox(height: 10),
+                                // Label field
+                                TextFormField(
+                                  initialValue: packSize.label ?? '',
+                                  decoration: InputDecoration(
+                                    labelText: 'Label (Optional)',
+                                    hintText: 'e.g., Family Pack, Small Pack',
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    filled: true,
+                                    fillColor: Colors.grey.shade50,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
                                   ),
+                                  onChanged: (value) {
+                                    setState(() {
+                                      packSizes[index] = PackSize(
+                                        quantity: packSizes[index].quantity,
+                                        price: packSizes[index].price,
+                                        label: value.isEmpty ? null : value,
+                                        stock: packSizes[index].stock,
+                                      );
+                                    });
+                                  },
+                                ),
                                 ],
-                              ),
                             ),
                           );
                         }).toList(),
-                        ElevatedButton.icon(
+                        // Add pack size button
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
                           onPressed: () {
                             setState(() {
                               packSizes.add(PackSize(quantity: 1.0, price: 0.0));
                             });
                           },
-                          icon: const Icon(Icons.add),
-                          label: const Text('Add Pack Size'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
+                            icon: const Icon(Icons.add_rounded, size: 20),
+                            label: const Text('Add Another Pack Size'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppTheme.primaryColor,
+                              side: BorderSide(color: AppTheme.primaryColor.withOpacity(0.4), width: 1.5),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
                           ),
                         ),
                         const SizedBox(height: 16),
+
+                        // Total stock summary (auto-calculated)
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                AppTheme.primaryColor.withOpacity(0.1),
+                                AppTheme.primaryColor.withOpacity(0.05),
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: AppTheme.primaryColor.withOpacity(0.3),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.primaryColor,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Icon(
+                                  Icons.inventory_2,
+                                  color: Colors.white,
+                                  size: 24,
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Total Stock (Number of Packs)',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.grey.shade600,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '${packSizes.fold<int>(0, (sum, pack) => sum + pack.stock)} packs',
+                                      style: TextStyle(
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppTheme.primaryColor,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(
+                                Icons.check_circle_rounded,
+                                color: AppTheme.successColor,
+                                size: 28,
+                              ),
+                            ],
+                          ),
+                        ),
                       ] else ...[
-                        // Pack size weight (for single pack size groceries)
+                        // Single pack mode - Pack size weight
                         if (selectedType == SellType.groceries) ...[
                           TextFormField(
                             controller: packSizeWeightController,
@@ -4296,9 +5054,13 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              hintText: selectedMeasurementUnit != null
-                                  ? "e.g., 250 for 250gm pack"
-                                  : "Enter pack size weight",
+                              hintText: selectedMeasurementUnit == MeasurementUnit.grams
+                                  ? "e.g., 250 for 250g pack"
+                                  : selectedMeasurementUnit == MeasurementUnit.liters
+                                      ? "e.g., 1 for 1L pack"
+                                      : selectedMeasurementUnit == MeasurementUnit.pieces
+                                          ? "e.g., 6 for 6 pieces"
+                                          : "e.g., 5 for 5kg pack",
                               filled: true,
                               fillColor: Colors.grey.shade50,
                             ),
@@ -4306,7 +5068,7 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                           ),
                           const SizedBox(height: 16),
                         ],
-                        // Stock quantity (number of packs/items available)
+                        // Stock quantity
                         TextFormField(
                           controller: quantityController,
                           keyboardType: TextInputType.number,
@@ -4321,7 +5083,7 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                               borderRadius: BorderRadius.circular(12),
                             ),
                             hintText: selectedType == SellType.groceries && !useMultiplePackSizes
-                                ? "e.g., 250 (number of packs available)"
+                                ? "e.g., 100 (how many packs you have)"
                                 : selectedMeasurementUnit != null
                                     ? "Enter stock quantity in ${selectedMeasurementUnit!.shortLabel}"
                                     : "Enter stock quantity",
@@ -4332,6 +5094,7 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                         ),
                       ],
                     ] else ...[
+                      // Vegetables (no multiple pack sizes) — just quantity
                       TextFormField(
                         controller: quantityController,
                         keyboardType: TextInputType.number,
@@ -4353,6 +5116,7 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                       ),
                     ],
                   ] else ...[
+                    // Non-grocery/vegetable types (cooked food, clothing, etc.)
                     TextFormField(
                       controller: quantityController,
                       keyboardType: TextInputType.number,
@@ -4817,15 +5581,21 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
               ),
             ],
 
-            // Product Description (for all items, especially useful for clothing)
+            // Product Description
             _buildSectionTitle("Product Description", icon: Icons.description, iconColor: Colors.blue),
             _buildCard(
               TextFormField(
                 controller: descriptionController,
                 maxLines: 5,
                 decoration: InputDecoration(
-                  labelText: "Describe your product (Brand, Material, Size, Features, etc.)",
-                  hintText: "E.g., Premium cotton sweatshirt from XYZ brand. Available in sizes S, M, L, XL. Soft fabric, perfect for casual wear...",
+                  labelText: selectedType == SellType.groceries
+                      ? "Describe your product (Origin, Quality, Freshness, etc.)"
+                      : "Describe your product (Brand, Material, Size, Features, etc.)",
+                  hintText: selectedType == SellType.groceries
+                      ? "E.g., Fresh organic tomatoes from local farm. Handpicked, no pesticides. Best consumed within 3-4 days..."
+                      : selectedType == SellType.vegetables
+                          ? "E.g., Farm-fresh green spinach. Organically grown, harvested daily..."
+                          : "E.g., Premium cotton sweatshirt from XYZ brand. Available in sizes S, M, L, XL. Soft fabric, perfect for casual wear...",
                   prefixIcon: const Icon(Icons.edit_note),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -4980,15 +5750,15 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          "* Required",
-                          style: TextStyle(
+                                      "* Required",
+                                      style: TextStyle(
                             color: AppTheme.lightText,
-                            fontSize: 12,
+                                      fontSize: 12,
                             fontWeight: FontWeight.w400,
-                          ),
-                        ),
-                      ],
-                    ),
+                                  ),
+                                ),
+                              ],
+                  ),
                   ],
                 ],
               ),
@@ -5318,12 +6088,12 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
 
             // Single Item Mode: Post Listing Button (inside scrollable area)
             if (!isMultiItemMode)
-              Container(
+            Container(
                 height: 56,
                 width: double.infinity,
-                decoration: BoxDecoration(
+              decoration: BoxDecoration(
                   gradient: AppTheme.primaryGradient,
-                  borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
                       color: AppTheme.teal.withOpacity(0.3),
@@ -5386,11 +6156,11 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                   height: 56,
                   width: double.infinity,
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Colors.orange.shade600, Colors.orange.shade800],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
+                gradient: LinearGradient(
+                  colors: [Colors.orange.shade600, Colors.orange.shade800],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
@@ -5451,56 +6221,56 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                     end: Alignment.bottomRight,
                   ),
                   borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.orange.withOpacity(0.4),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: isSubmitting ? null : _submit,
-                    borderRadius: BorderRadius.circular(16),
-                    child: Container(
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.orange.withOpacity(0.4),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: isSubmitting ? null : _submit,
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 18),
                       alignment: Alignment.center,
-                      child: isSubmitting
-                          ? const SizedBox(
-                              height: 24,
-                              width: 24,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.5,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
-                            )
-                          : Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
+                    child: isSubmitting
+                        ? const SizedBox(
+                            height: 24,
+                            width: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
                               mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
+                            children: [
+                              Icon(
                                   Icons.add_circle_outline_rounded,
-                                  size: 22,
+                                size: 22,
+                                color: Colors.white,
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                  "Add to List",
+                                style: const TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: -0.3,
                                   color: Colors.white,
                                 ),
-                                const SizedBox(width: 12),
-                                Text(
-                                  "Add to List",
-                                  style: const TextStyle(
-                                    fontSize: 17,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: -0.3,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ],
-                            ),
-                    ),
+                              ),
+                            ],
+                          ),
                   ),
                 ),
               ),
+            ),
             ] else ...[
               // Single Item Mode: Post Listing Button
               Container(
@@ -5566,7 +6336,7 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
       ),
           ],
         ),
-      ),
+        ),
       ),
     );
   }

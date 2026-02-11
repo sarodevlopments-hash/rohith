@@ -28,6 +28,7 @@ class UserFirestoreService {
       'createdAt': user.createdAt.toUtc(),
       'lastLoginAt': user.lastLoginAt?.toUtc(),
       'isRegistered': user.isRegistered,
+      'role': user.role,
       'updatedAt': FieldValue.serverTimestamp(),
     };
   }
@@ -50,6 +51,7 @@ class UserFirestoreService {
         createdAt: _dt(data['createdAt']),
         lastLoginAt: data['lastLoginAt'] == null ? null : _dt(data['lastLoginAt']),
         isRegistered: data['isRegistered'] as bool? ?? false,
+        role: data['role'] as String?,
       );
     } catch (e) {
       print('❌ Error converting Firestore data to AppUser: $e');

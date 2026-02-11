@@ -24,13 +24,17 @@ class SellerProfileAdapter extends TypeAdapter<SellerProfile> {
       sellerId: fields[4] as String,
       phoneNumber: fields[5] as String,
       pickupLocation: fields[6] as String,
+      groceryType: fields[7] as String?,
+      sellerType: fields[8] as String?,
+      groceryOnboardingCompleted: fields[9] as bool? ?? false,
+      groceryDocuments: (fields[10] as Map?)?.cast<String, String>(),
     );
   }
 
   @override
   void write(BinaryWriter writer, SellerProfile obj) {
     writer
-      ..writeByte(7)
+      ..writeByte(11)
       ..writeByte(0)
       ..write(obj.sellerName)
       ..writeByte(1)
@@ -44,7 +48,15 @@ class SellerProfileAdapter extends TypeAdapter<SellerProfile> {
       ..writeByte(5)
       ..write(obj.phoneNumber)
       ..writeByte(6)
-      ..write(obj.pickupLocation);
+      ..write(obj.pickupLocation)
+      ..writeByte(7)
+      ..write(obj.groceryType)
+      ..writeByte(8)
+      ..write(obj.sellerType)
+      ..writeByte(9)
+      ..write(obj.groceryOnboardingCompleted)
+      ..writeByte(10)
+      ..write(obj.groceryDocuments);
   }
 
   @override

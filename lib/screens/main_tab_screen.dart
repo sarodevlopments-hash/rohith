@@ -18,6 +18,7 @@ import 'seller_dashboard_screen.dart';
 import 'location_selection_screen.dart';
 import 'buyer_profile_screen.dart';
 import '../theme/app_theme.dart';
+import '../models/sell_type.dart';
 
 class MainTabScreen extends StatefulWidget {
   const MainTabScreen({super.key});
@@ -32,6 +33,8 @@ class _MainTabScreenState extends State<MainTabScreen> {
   final ValueNotifier<int> _sellPromptCounter = ValueNotifier<int>(0);
   final ValueNotifier<String?> _currentLocation = ValueNotifier<String?>(null);
   int _locationRefreshKey = 0; // Key to force home screen refresh
+  SellType? _pendingSellType; // Set when navigating from onboarding to add listing
+  int _addListingKey = 0; // Key to force AddListingScreen rebuild
   late final ValueListenable<Box<Order>> _ordersListenable;
   VoidCallback? _ordersListener;
 
@@ -518,11 +521,15 @@ class _MainTabScreenState extends State<MainTabScreen> {
   Widget _buildSellerAddListingTab() {
     // No wrapper padding - match buyer screens structure
     // Internal padding in AddListingScreen handles spacing
+    // Use key to force rebuild when switching to grocery mode
     return AddListingScreen(
+      key: ValueKey('add_listing_$_addListingKey'),
       promptCounter: _sellPromptCounter,
+      initialSellType: _pendingSellType,
       onBackToDashboard: () {
         setState(() {
           _currentIndex = 0; // Switch to Dashboard tab
+          _pendingSellType = null; // Clear pending type when going back
         });
       },
     );
@@ -531,7 +538,16 @@ class _MainTabScreenState extends State<MainTabScreen> {
   Widget _buildSellerDashboardTab(String sellerId) {
     // No wrapper padding - match buyer screens structure
     // Internal padding in SellerDashboardScreen handles spacing
-    return SellerDashboardScreen(sellerId: sellerId);
+    return SellerDashboardScreen(
+      sellerId: sellerId,
+      onSwitchToSelling: (SellType type) {
+        setState(() {
+          _pendingSellType = type;
+          _addListingKey++; // Force rebuild with new type
+          _currentIndex = 1; // Switch to Start Selling tab
+        });
+      },
+    );
   }
 
   List<Widget> _buildBuyerTabs() {

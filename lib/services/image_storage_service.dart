@@ -110,6 +110,127 @@ class ImageStorageService {
     return uploadedUrls;
   }
 
+  /// Upload a document (PDF, JPG, PNG) to Firebase Storage for grocery onboarding
+  /// Returns the download URL if successful, null otherwise
+  static Future<String?> uploadDocument({
+    required String documentType,
+    String? localPath,
+    Uint8List? documentBytes, // For web
+    required String sellerId,
+  }) async {
+    try {
+      final currentUser = FirebaseAuth.instance.currentUser;
+      print('🔐 Upload Document Debug:');
+      print('   - Current User: ${currentUser?.uid ?? "NULL - NOT LOGGED IN!"}');
+      print('   - Seller ID: $sellerId');
+      print('   - Match: ${currentUser?.uid == sellerId}');
+      
+      if (currentUser == null) {
+        print('❌ ERROR: User is not logged in!');
+        return null;
+      }
+      
+      if (currentUser.uid != sellerId) {
+        print('❌ ERROR: User ID mismatch!');
+        print('   Expected: $sellerId');
+        print('   Got: ${currentUser.uid}');
+        return null;
+      }
+      
+      print('✅ Authentication check passed');
+      
+      // Get fresh auth token
+      final token = await currentUser.getIdToken();
+      print('🎫 Auth token: ${token?.substring(0, 20)}...');
+      
+
+      // Generate unique filename
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      // Clean document type name for file path
+      final cleanDocType = documentType.replaceAll(' ', '_').replaceAll('/', '_');
+      final fileName = '${sellerId}/documents/grocery/${cleanDocType}_$timestamp';
+
+      // Determine file extension and content type
+      String extension = 'pdf';
+      String contentType = 'application/pdf';
+      
+      if (kIsWeb && documentBytes != null) {
+        // Try to detect type from bytes (simple check for PDF signature)
+        if (documentBytes.length > 4) {
+          final header = String.fromCharCodes(documentBytes.sublist(0, 4));
+          if (header == '%PDF') {
+            extension = 'pdf';
+            contentType = 'application/pdf';
+          } else if (documentBytes[0] == 0xFF && documentBytes[1] == 0xD8) {
+            extension = 'jpg';
+            contentType = 'image/jpeg';
+          } else if (documentBytes[0] == 0x89 && documentBytes[1] == 0x50) {
+            extension = 'png';
+            contentType = 'image/png';
+          }
+        }
+      } else if (localPath != null) {
+        // Get extension from file path
+        if (localPath.toLowerCase().endsWith('.pdf')) {
+          extension = 'pdf';
+          contentType = 'application/pdf';
+        } else if (localPath.toLowerCase().endsWith('.jpg') || localPath.toLowerCase().endsWith('.jpeg')) {
+          extension = 'jpg';
+          contentType = 'image/jpeg';
+        } else if (localPath.toLowerCase().endsWith('.png')) {
+          extension = 'png';
+          contentType = 'image/png';
+        }
+      }
+
+      // Create reference with extension
+      final ref = _storage.ref().child('$fileName.$extension');
+
+      // Upload based on platform
+      if (kIsWeb) {
+        // Web: Upload from bytes
+        if (documentBytes == null) {
+          print('❌ No document bytes provided for web upload');
+          return null;
+        }
+        await ref.putData(
+          documentBytes,
+          SettableMetadata(
+            contentType: contentType,
+            cacheControl: 'max-age=31536000', // Cache for 1 year
+          ),
+        );
+      } else {
+        // Mobile: Upload from file
+        if (localPath == null) {
+          print('❌ No local path provided for mobile upload');
+          return null;
+        }
+        final file = File(localPath);
+        if (!await file.exists()) {
+          print('❌ Document file does not exist: $localPath');
+          return null;
+        }
+        await ref.putFile(
+          file,
+          SettableMetadata(
+            contentType: contentType,
+            cacheControl: 'max-age=31536000',
+          ),
+        );
+      }
+
+      // Get download URL
+      final downloadUrl = await ref.getDownloadURL();
+      print('✅ Document uploaded successfully: $fileName.$extension');
+      print('   URL: $downloadUrl');
+      return downloadUrl;
+    } catch (e) {
+      print('❌ Error uploading document: $e');
+      return null;
+    }
+  }
+
   /// Delete an image from Storage
   static Future<bool> deleteImage(String imageUrl) async {
     try {
