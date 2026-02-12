@@ -6086,68 +6086,6 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
 
             const SizedBox(height: 32),
 
-            // Single Item Mode: Post Listing Button (inside scrollable area)
-            if (!isMultiItemMode)
-            Container(
-                height: 56,
-                width: double.infinity,
-              decoration: BoxDecoration(
-                  gradient: AppTheme.primaryGradient,
-                borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppTheme.teal.withOpacity(0.3),
-                      blurRadius: 16,
-                      offset: const Offset(0, 8),
-                      spreadRadius: -2,
-                    ),
-                    BoxShadow(
-                      color: AppTheme.teal.withOpacity(0.15),
-                      blurRadius: 8,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: isSubmitting ? null : _submit,
-                    borderRadius: BorderRadius.circular(16),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 18),
-                      alignment: Alignment.center,
-                      child: isSubmitting
-                          ? const SizedBox(
-                              height: 24,
-                              width: 24,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.5,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
-                            )
-                          : Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.upload_rounded, size: 22, color: Colors.white),
-                                const SizedBox(width: 12),
-                                const Text(
-                                  "Post Listing",
-                                  style: TextStyle(
-                                    fontSize: 17,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: -0.3,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ],
-                            ),
-                    ),
-                  ),
-                ),
-              ),
-            const SizedBox(height: 32),
-
             // Buttons Section - Clear Hierarchy
             if (isMultiItemMode) ...[
               // Primary CTA: Post All Listings (only show when there are pending items)

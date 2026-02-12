@@ -206,7 +206,7 @@ Widget build(BuildContext context) {
                           ],
                         ),
                       ),
-                    );
+          );
                   }
                 },
               );
@@ -519,8 +519,8 @@ Widget build(BuildContext context) {
                 fontSize: 11,
                 color: const Color(0xFF9CA3AF), // Light muted gray
                 fontWeight: FontWeight.w400,
-              ),
             ),
+          ),
           ],
         ],
       ),
@@ -591,8 +591,8 @@ Widget build(BuildContext context) {
                 style: TextStyle(
                   fontSize: 14,
                   color: const Color(0xFF6B7280),
-                ),
-              ),
+          ),
+        ),
             ),
           )
         else
@@ -806,7 +806,7 @@ Widget build(BuildContext context) {
                         ),
                       ),
                     ),
-                  ),
+              ),
                   Padding(
                     padding: const EdgeInsets.only(left: 12),
               child: Row(
@@ -827,7 +827,7 @@ Widget build(BuildContext context) {
                               fontSize: 12,
                               color: AppTheme.darkText,
                               fontWeight: FontWeight.w500,
-                            ),
+                      ),
                           ),
                         ),
                       ],
@@ -1024,8 +1024,8 @@ Widget build(BuildContext context) {
                           style: TextStyle(
                             fontSize: 12,
                               color: const Color(0xFF6B7280), // Muted gray
-                            ),
                           ),
+                        ),
                           const SizedBox(width: 10),
                           _buildStatusBadge(order.orderStatus),
                         ],
@@ -1050,8 +1050,8 @@ Widget build(BuildContext context) {
                         fontSize: 22,
                         fontWeight: FontWeight.w700,
                         color: AppTheme.teal, // Teal accent
-                      ),
                     ),
+                  ),
                     const SizedBox(height: 6),
                   Text(
                     order.purchasedAt.toLocal().toString().split(' ')[0],
@@ -1209,8 +1209,8 @@ Widget build(BuildContext context) {
             border: Border.all(
               color: borderColor,
               width: 1.5,
-            ),
-          ),
+                ),
+              ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -1223,8 +1223,8 @@ Widget build(BuildContext context) {
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                 ),
-              ),
-            ],
+          ),
+        ],
           ),
         ),
       ),
@@ -2499,13 +2499,13 @@ Widget build(BuildContext context) {
                   ),
                           ],
                         ),
-                      ),
+                ),
                       Icon(
                         Icons.chevron_right_rounded,
                         color: const Color(0xFF9CA3AF), // Light muted gray
                         size: 24,
                       ),
-                    ],
+              ],
                   ),
                 ),
               ),
