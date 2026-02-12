@@ -9,16 +9,20 @@ import 'seller_transactions_screen.dart';
 import 'seller_item_insights_screen.dart';
 import 'seller_reviews_screen.dart';
 import 'seller_item_management_screen.dart';
+import 'grocery_onboarding_screen.dart';
 import '../services/notification_service.dart';
 import '../services/order_firestore_service.dart';
 import '../services/web_order_broadcast.dart';
 import '../services/seller_profile_service.dart';
 import '../theme/app_theme.dart';
+import '../models/sell_type.dart';
+import '../models/seller_profile.dart';
 
 class SellerDashboardScreen extends StatefulWidget {
   final String sellerId;
+  final void Function(SellType type)? onSwitchToSelling;
 
-  const SellerDashboardScreen({super.key, required this.sellerId});
+  const SellerDashboardScreen({super.key, required this.sellerId, this.onSwitchToSelling});
 
   @override
   State<SellerDashboardScreen> createState() => _SellerDashboardScreenState();
@@ -33,7 +37,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
 Widget build(BuildContext context) {
   // Validate sellerId
   if (widget.sellerId.isEmpty) {
-    return Scaffold(
+  return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         elevation: 0,
@@ -103,58 +107,58 @@ Widget build(BuildContext context) {
           
           return ValueListenableBuilder(
             valueListenable: ordersBox.listenable(),
-            builder: (context, Box<Order> ordersBox, _) {
-              // Check for new orders when orders box changes (immediately, not just post-frame)
-              NotificationService.checkForNewOrders(context, widget.sellerId);
-              
-              return ValueListenableBuilder(
+        builder: (context, Box<Order> ordersBox, _) {
+          // Check for new orders when orders box changes (immediately, not just post-frame)
+          NotificationService.checkForNewOrders(context, widget.sellerId);
+          
+          return ValueListenableBuilder(
                 valueListenable: listingBox.listenable(),
-                builder: (context, Box<Listing> listingBox, _) {
+            builder: (context, Box<Listing> listingBox, _) {
                   try {
-                    final myListings = listingBox.values
-                        .where((l) => l.sellerId == widget.sellerId)
-                        .toList();
+              final myListings = listingBox.values
+                  .where((l) => l.sellerId == widget.sellerId)
+                  .toList();
 
-                    // Filter orders by sellerId (new field) or by listing sellerId (backward compatibility)
-                    final myOrders = ordersBox.values
-                        .where((order) {
-                          // First check if order has sellerId field (new orders)
-                          if (order.sellerId.isNotEmpty && order.sellerId == widget.sellerId) {
-                            return true;
-                          }
-                          // Fallback: check via listing (for old orders)
-                          try {
-                            final listingKey = int.tryParse(order.listingId);
-                            if (listingKey != null) {
-                              final listing = listingBox.get(listingKey);
-                              return listing?.sellerId == widget.sellerId;
-                            }
-                          } catch (e) {
-                            return false;
-                          }
-                          return false;
-                        })
-                        .toList();
+              // Filter orders by sellerId (new field) or by listing sellerId (backward compatibility)
+              final myOrders = ordersBox.values
+                  .where((order) {
+                    // First check if order has sellerId field (new orders)
+                    if (order.sellerId.isNotEmpty && order.sellerId == widget.sellerId) {
+                      return true;
+                    }
+                    // Fallback: check via listing (for old orders)
+                    try {
+                      final listingKey = int.tryParse(order.listingId);
+                      if (listingKey != null) {
+                        final listing = listingBox.get(listingKey);
+                        return listing?.sellerId == widget.sellerId;
+                      }
+                    } catch (e) {
+                      return false;
+                    }
+                    return false;
+                  })
+                  .toList();
 
-                    final metrics = _calculateMetrics(myOrders, myListings, _selectedTimeRange, _customStartDate, _customEndDate);
-                    final chartData = _getChartData(myOrders, _selectedTimeRange, _customStartDate, _customEndDate);
+              final metrics = _calculateMetrics(myOrders, myListings, _selectedTimeRange, _customStartDate, _customEndDate);
+              final chartData = _getChartData(myOrders, _selectedTimeRange, _customStartDate, _customEndDate);
 
-                    return SingleChildScrollView(
+              return SingleChildScrollView(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24), // Generous padding for professional layout
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
-                        children: [
+            children: [
                           // Key Metrics Cards - 2x2 Grid
                           _buildKPIGrid(metrics, myOrders),
                           const SizedBox(height: 28),
 
                           // Orders Section
-                          _buildPendingOrdersSection(myOrders),
-                          const SizedBox(height: 24),
-                          
-                          // Live Kitchen Orders
-                          _buildLiveKitchenOrdersSection(myOrders),
+                    _buildPendingOrdersSection(myOrders),
+                    const SizedBox(height: 24),
+                    
+                    // Live Kitchen Orders
+                    _buildLiveKitchenOrdersSection(myOrders),
                           const SizedBox(height: 28),
 
                           // Sales Overview Chart (with time range selector)
@@ -162,20 +166,22 @@ Widget build(BuildContext context) {
                           const SizedBox(height: 28),
 
                           // Top Items Section
-                          _buildItemInsightsSection(myListings, myOrders),
+                    _buildItemInsightsSection(myListings, myOrders),
                           const SizedBox(height: 28),
 
-                          // Reviews Section
-                          _buildReviewsSection(),
+                    // Reviews Section
+                    _buildReviewsSection(),
                           const SizedBox(height: 24),
 
                           // Quick Actions (at bottom)
                           _buildQuickActions(),
                           const SizedBox(height: 16),
+                          _buildGroceryOnboardingCard(),
+                          const SizedBox(height: 16),
                           _buildItemManagementSection(),
-                        ],
-                      ),
-                    );
+                  ],
+                ),
+              );
                   } catch (e) {
                     debugPrint('Error building seller dashboard content: $e');
                     return Center(
@@ -232,10 +238,10 @@ Widget build(BuildContext context) {
             ),
           );
         }
-      },
-    ),
-  );
-}
+        },
+      ),
+    );
+  }
 
   Widget _buildTimeRangeSelector() {
     return Container(
@@ -371,8 +377,8 @@ Widget build(BuildContext context) {
       children: [
         // Row 1: Total Orders & Total Revenue
         Row(
-          children: [
-            Expanded(
+      children: [
+        Expanded(
               child: _buildKPICard(
                 icon: Icons.shopping_cart_rounded,
                 title: 'Total Orders',
@@ -383,10 +389,10 @@ Widget build(BuildContext context) {
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
               child: _buildKPICard(
                 icon: Icons.currency_rupee_rounded,
                 title: 'Total Revenue',
@@ -460,15 +466,15 @@ Widget build(BuildContext context) {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
           // Circular icon container with soft colored background
-          Container(
+              Container(
             width: 48,
             height: 48,
-            decoration: BoxDecoration(
+                decoration: BoxDecoration(
               gradient: iconGradient,
               shape: BoxShape.circle,
               boxShadow: [
@@ -476,9 +482,9 @@ Widget build(BuildContext context) {
                   color: AppTheme.teal.withOpacity(0.15),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
-                ),
-              ],
-            ),
+              ),
+            ],
+          ),
             child: Icon(icon, color: Colors.white, size: 24),
           ),
           const SizedBox(height: 16),
@@ -565,10 +571,10 @@ Widget build(BuildContext context) {
         // Chart Container
         if (chartData.isEmpty)
           Container(
-            height: 200,
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
+        height: 200,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
               borderRadius: BorderRadius.circular(18),
               boxShadow: [
                 BoxShadow(
@@ -578,10 +584,10 @@ Widget build(BuildContext context) {
                   spreadRadius: 0,
                 ),
               ],
-            ),
-            child: Center(
-              child: Text(
-                'No sales data available',
+        ),
+        child: Center(
+          child: Text(
+            'No sales data available',
                 style: TextStyle(
                   fontSize: 14,
                   color: const Color(0xFF6B7280),
@@ -592,115 +598,115 @@ Widget build(BuildContext context) {
         else
           Builder(
             builder: (context) {
-              final labels = chartData.keys.toList();
-              final values = chartData.values.map((v) => v[0]).toList();
-              final maxValue = values.isEmpty ? 100.0 : values.reduce((a, b) => a > b ? a : b) * 1.2;
-              
-              // Ensure horizontalInterval is never zero (fl_chart requirement)
-              final horizontalInterval = maxValue > 0 ? (maxValue / 5).clamp(1.0, double.infinity) : 1.0;
+    final labels = chartData.keys.toList();
+    final values = chartData.values.map((v) => v[0]).toList();
+    final maxValue = values.isEmpty ? 100.0 : values.reduce((a, b) => a > b ? a : b) * 1.2;
+    
+    // Ensure horizontalInterval is never zero (fl_chart requirement)
+    final horizontalInterval = maxValue > 0 ? (maxValue / 5).clamp(1.0, double.infinity) : 1.0;
 
-              return Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
                   borderRadius: BorderRadius.circular(18),
-                  boxShadow: [
-                    BoxShadow(
+        boxShadow: [
+          BoxShadow(
                       color: Colors.black.withOpacity(0.04),
                       blurRadius: 12,
                       offset: const Offset(0, 4),
                       spreadRadius: 0,
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+          ),
+        ],
+      ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                     // Section Title
                     Text(
-                      'Sales Overview',
-                      style: TextStyle(
-                        fontSize: 18,
+            'Sales Overview',
+            style: TextStyle(
+              fontSize: 18,
                         fontWeight: FontWeight.w600,
                         color: const Color(0xFF1F2937), // Dark gray
-                      ),
-                    ),
+            ),
+          ),
                     const SizedBox(height: 24),
                     SizedBox(
                       height: 220,
-                      child: BarChart(
-                        BarChartData(
-                          alignment: BarChartAlignment.spaceAround,
-                          maxY: maxValue,
-                          barTouchData: BarTouchData(enabled: false),
-                          titlesData: FlTitlesData(
-                            show: true,
-                            bottomTitles: AxisTitles(
-                              sideTitles: SideTitles(
-                                showTitles: true,
-                                getTitlesWidget: (value, meta) {
-                                  final index = value.toInt();
-                                  if (index >= 0 && index < labels.length) {
-                                    return Padding(
-                                      padding: const EdgeInsets.only(top: 8),
-                                      child: Text(
-                                        labels[index],
-                                        style: TextStyle(
+            child: BarChart(
+              BarChartData(
+                alignment: BarChartAlignment.spaceAround,
+                maxY: maxValue,
+                barTouchData: BarTouchData(enabled: false),
+                titlesData: FlTitlesData(
+                  show: true,
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      getTitlesWidget: (value, meta) {
+                        final index = value.toInt();
+                        if (index >= 0 && index < labels.length) {
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Text(
+                              labels[index],
+                              style: TextStyle(
                                           fontSize: 11,
                                           color: const Color(0xFF6B7280), // Muted gray
                                           fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    );
-                                  }
-                                  return const Text('');
-                                },
                               ),
                             ),
-                            leftTitles: AxisTitles(
-                              sideTitles: SideTitles(
-                                showTitles: true,
+                          );
+                        }
+                        return const Text('');
+                      },
+                    ),
+                  ),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
                                 reservedSize: 45,
-                                getTitlesWidget: (value, meta) {
+                      getTitlesWidget: (value, meta) {
                                   return Padding(
                                     padding: const EdgeInsets.only(right: 8),
                                     child: Text(
-                                      '₹${value.toInt()}',
-                                      style: TextStyle(
-                                        fontSize: 10,
+                          '₹${value.toInt()}',
+                          style: TextStyle(
+                            fontSize: 10,
                                         color: const Color(0xFF9CA3AF), // Light muted gray
                                         fontWeight: FontWeight.w500,
                                       ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                            topTitles: const AxisTitles(
-                              sideTitles: SideTitles(showTitles: false),
-                            ),
-                            rightTitles: const AxisTitles(
-                              sideTitles: SideTitles(showTitles: false),
-                            ),
                           ),
-                          gridData: FlGridData(
-                            show: true,
-                            drawVerticalLine: false,
-                            horizontalInterval: horizontalInterval,
+                        );
+                      },
+                    ),
+                  ),
+                  topTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  rightTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                ),
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  horizontalInterval: horizontalInterval,
                             getDrawingHorizontalLine: (value) {
                               return FlLine(
                                 color: const Color(0xFFE5E7EB), // Light gray grid lines
                                 strokeWidth: 1,
                               );
                             },
-                          ),
-                          borderData: FlBorderData(show: false),
-                          barGroups: values.asMap().entries.map((entry) {
-                            return BarChartGroupData(
-                              x: entry.key,
-                              barRods: [
-                                BarChartRodData(
-                                  toY: entry.value,
+                ),
+                borderData: FlBorderData(show: false),
+                barGroups: values.asMap().entries.map((entry) {
+                  return BarChartGroupData(
+                    x: entry.key,
+                    barRods: [
+                      BarChartRodData(
+                        toY: entry.value,
                                   gradient: LinearGradient(
                                     colors: [
                                       AppTheme.teal, // Teal/Mint accent
@@ -710,18 +716,18 @@ Widget build(BuildContext context) {
                                     end: Alignment.topCenter,
                                   ),
                                   width: 24,
-                                  borderRadius: const BorderRadius.vertical(
+                        borderRadius: const BorderRadius.vertical(
                                     top: Radius.circular(6),
-                                  ),
-                                ),
-                              ],
-                            );
-                          }).toList(),
                         ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+        ],
+      ),
               );
             },
           ),
@@ -792,7 +798,7 @@ Widget build(BuildContext context) {
                     bottom: 0,
                     child: Container(
                       width: 4,
-                      decoration: BoxDecoration(
+              decoration: BoxDecoration(
                         color: AppTheme.badgeOffer,
                         borderRadius: const BorderRadius.only(
                           topLeft: Radius.circular(18),
@@ -803,8 +809,8 @@ Widget build(BuildContext context) {
                   ),
                   Padding(
                     padding: const EdgeInsets.only(left: 12),
-                    child: Row(
-                      children: [
+              child: Row(
+                children: [
                         Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
@@ -814,8 +820,8 @@ Widget build(BuildContext context) {
                           child: Icon(Icons.info_outline_rounded, color: AppTheme.badgeOffer, size: 20),
                         ),
                         const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
+                  Expanded(
+                    child: Text(
                             'Showing ${ordersNeedingAction.length} order(s) that need seller action',
                             style: AppTheme.bodySmall.copyWith(
                               fontSize: 12,
@@ -865,9 +871,9 @@ Widget build(BuildContext context) {
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        'No Pending Orders',
-                        style: TextStyle(
-                          fontSize: 16,
+                      'No Pending Orders',
+                      style: TextStyle(
+                        fontSize: 16,
                           fontWeight: FontWeight.w600,
                           color: const Color(0xFF1F2937), // Dark gray
                         ),
@@ -991,32 +997,32 @@ Widget build(BuildContext context) {
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        order.foodName,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      order.foodName,
                         style: TextStyle(
-                          fontSize: 16,
+                        fontSize: 16,
                           fontWeight: FontWeight.w600,
                           color: const Color(0xFF1F2937), // Dark gray
-                        ),
                       ),
+                    ),
                       const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Text(
-                            'Order ID: ${order.orderId.substring(order.orderId.length - 6)}',
-                            style: TextStyle(
-                              fontSize: 12,
+                    Row(
+                      children: [
+                        Text(
+                          'Order ID: ${order.orderId.substring(order.orderId.length - 6)}',
+                          style: TextStyle(
+                            fontSize: 12,
                               color: const Color(0xFF6B7280), // Muted gray
                             ),
                           ),
@@ -1025,21 +1031,21 @@ Widget build(BuildContext context) {
                         ],
                       ),
                       const SizedBox(height: 8),
-                      Text(
-                        'Qty: ${order.quantity} × ₹${order.discountedPrice.toStringAsFixed(0)}',
-                        style: TextStyle(
+                    Text(
+                      'Qty: ${order.quantity} × ₹${order.discountedPrice.toStringAsFixed(0)}',
+                      style: TextStyle(
                           fontSize: 13,
                           color: const Color(0xFF6B7280),
-                        ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      '₹${order.pricePaid.toStringAsFixed(0)}',
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '₹${order.pricePaid.toStringAsFixed(0)}',
                       style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.w700,
@@ -1047,17 +1053,17 @@ Widget build(BuildContext context) {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    Text(
-                      order.purchasedAt.toLocal().toString().split(' ')[0],
-                      style: TextStyle(
+                  Text(
+                    order.purchasedAt.toLocal().toString().split(' ')[0],
+                    style: TextStyle(
                         fontSize: 11,
                         color: const Color(0xFF9CA3AF), // Light muted gray
-                      ),
                     ),
-                  ],
-                ),
-              ],
-            ),
+                  ),
+                ],
+              ),
+            ],
+          ),
             const SizedBox(height: 20),
             Divider(
               height: 1,
@@ -1065,23 +1071,23 @@ Widget build(BuildContext context) {
               color: const Color(0xFFE5E7EB), // Light gray divider
             ),
             const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
+          Row(
+            children: [
+              Expanded(
                   child: _buildSecondaryButton(
                     icon: Icons.close_rounded,
                     label: 'Reject',
-                    onPressed: () => _rejectOrder(order),
+                  onPressed: () => _rejectOrder(order),
                     isDanger: true,
-                  ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  flex: 2,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
                   child: _buildPrimaryButton(
                     icon: Icons.check_rounded,
                     label: 'Accept Order',
-                    onPressed: () => _acceptOrder(order),
+                  onPressed: () => _acceptOrder(order),
                   ),
                 ),
               ],
@@ -1296,7 +1302,7 @@ Widget build(BuildContext context) {
       if (aPriority != bPriority) return aPriority.compareTo(bPriority);
       return b.purchasedAt.compareTo(a.purchasedAt);
     });
-    
+
     // Always show the section, even if empty (with helpful message)
     if (liveKitchenOrders.isEmpty) {
       return Column(
@@ -1340,9 +1346,9 @@ Widget build(BuildContext context) {
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        'No Live Kitchen Orders',
-                        style: TextStyle(
-                          fontSize: 16,
+                      'No Live Kitchen Orders',
+                      style: TextStyle(
+                        fontSize: 16,
                           fontWeight: FontWeight.w600,
                           color: const Color(0xFF1F2937), // Dark gray
                         ),
@@ -2164,6 +2170,141 @@ Widget build(BuildContext context) {
     );
   }
 
+  Widget _buildGroceryOnboardingCard() {
+    return FutureBuilder<SellerProfile?>(
+      future: SellerProfileService.getProfile(widget.sellerId),
+      builder: (context, snapshot) {
+        final hasCompletedOnboarding = snapshot.data?.groceryOnboardingCompleted ?? false;
+
+        return Container(
+          margin: const EdgeInsets.only(top: 16),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () async {
+                print('🛒 Navigating to Grocery Onboarding Screen');
+                final result = await Navigator.push<SellType>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const GroceryOnboardingScreen(),
+                  ),
+                );
+                
+                // If onboarding completed successfully, switch to Start Selling tab with groceries
+                if (result == SellType.groceries && mounted) {
+                  print('✅ Grocery onboarding completed, switching to Start Selling tab');
+                  // Notify the parent MainTabScreen to switch to Start Selling tab
+                  if (widget.onSwitchToSelling != null) {
+                    widget.onSwitchToSelling!(SellType.groceries);
+                  }
+                }
+              },
+          borderRadius: BorderRadius.circular(18),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  const Color(0xFF50C878).withOpacity(0.1),
+                  const Color(0xFF50C878).withOpacity(0.05),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: const Color(0xFF50C878).withOpacity(0.3),
+                width: 2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF50C878).withOpacity(0.2),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF50C878).withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(
+                    hasCompletedOnboarding ? Icons.edit_rounded : Icons.shopping_bag,
+                    color: const Color(0xFF50C878),
+                    size: 32,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              hasCompletedOnboarding 
+                                  ? 'Manage Grocery Documents'
+                                  : 'Sell Groceries',
+                              style: AppTheme.heading4.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: AppTheme.darkText,
+                              ),
+                            ),
+                          ),
+                          if (hasCompletedOnboarding) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF50C878),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                'Active',
+                                style: AppTheme.bodySmall.copyWith(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        hasCompletedOnboarding
+                            ? 'Update documents or seller type'
+                            : 'Start selling fresh produce, grains & more',
+                        style: AppTheme.bodySmall.copyWith(
+                          color: AppTheme.lightText,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_forward_ios,
+                  color: const Color(0xFF50C878),
+                  size: 20,
+                ),
+              ],
+            ),
+          ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildItemManagementSection() {
     return Container(
       margin: const EdgeInsets.only(top: 16),
@@ -2187,43 +2328,43 @@ Widget build(BuildContext context) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onTap,
+      onTap: onTap,
         borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.all(16),
+      child: Container(
+        padding: const EdgeInsets.all(16),
           decoration: AppTheme.getCardDecoration(elevated: true),
-          child: Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      AppTheme.teal.withOpacity(0.15),
-                      AppTheme.aqua.withOpacity(0.1),
+                      color.withOpacity(0.15),
+                      color.withOpacity(0.1),
                     ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
-                  borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: AppTheme.teal.withOpacity(0.2),
+                    color: color.withOpacity(0.2),
                     width: 1,
                   ),
-                ),
-                child: Icon(icon, color: AppTheme.teal, size: 28),
               ),
+              child: Icon(icon, color: color, size: 28),
+            ),
               const SizedBox(height: 10),
-              Text(
-                title,
+            Text(
+              title,
                 style: AppTheme.bodySmall.copyWith(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
                   color: AppTheme.darkText,
-                ),
-                textAlign: TextAlign.center,
               ),
-            ],
+              textAlign: TextAlign.center,
+            ),
+          ],
           ),
         ),
       ),
@@ -2306,26 +2447,26 @@ Widget build(BuildContext context) {
                 borderRadius: BorderRadius.circular(18),
                 child: Padding(
                   padding: const EdgeInsets.all(18),
-                  child: Row(
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              listing.name,
+                      Text(
+                        listing.name,
                               style: TextStyle(
-                                fontSize: 16,
+                          fontSize: 16,
                                 fontWeight: FontWeight.w600,
                                 color: const Color(0xFF1F2937), // Dark gray
-                              ),
-                            ),
+                        ),
+                      ),
                             const SizedBox(height: 8),
                             Row(
                               children: [
-                                Text(
+                      Text(
                                   'Units sold: ',
-                                  style: TextStyle(
+                        style: TextStyle(
                                     fontSize: 13,
                                     color: const Color(0xFF6B7280), // Muted gray
                                   ),
@@ -2352,10 +2493,10 @@ Widget build(BuildContext context) {
                                     fontSize: 13,
                                     fontWeight: FontWeight.w600,
                                     color: const Color(0xFF1F2937),
-                                  ),
-                                ),
-                              ],
-                            ),
+                        ),
+                      ),
+                    ],
+                  ),
                           ],
                         ),
                       ),
@@ -2455,7 +2596,7 @@ Widget build(BuildContext context) {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'No reviews yet',
+                    'No reviews yet',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,

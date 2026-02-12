@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../screens/main_tab_screen.dart';
 import '../screens/login_screen.dart';
 import '../screens/registration_screen.dart';
+import '../screens/owner_dashboard_screen.dart';
 import '../models/app_user.dart';
 import '../services/user_service.dart';
 import '../services/user_firestore_service.dart';
@@ -49,6 +50,7 @@ class AuthGate extends StatelessWidget {
               }
               
               // If user exists and is registered, go to main screen
+              // Note: Owner dashboard is accessed via separate web entry point (main_web.dart)
               if (appUser != null && appUser.isRegistered) {
                 print('✅ User is registered - navigating to MainTabScreen');
                 return const MainTabScreen();

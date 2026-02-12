@@ -24,13 +24,14 @@ class AppUserAdapter extends TypeAdapter<AppUser> {
       createdAt: fields[4] as DateTime,
       lastLoginAt: fields[5] as DateTime?,
       isRegistered: fields[6] as bool,
+      role: fields[7] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, AppUser obj) {
     writer
-      ..writeByte(7)
+      ..writeByte(8)
       ..writeByte(0)
       ..write(obj.uid)
       ..writeByte(1)
@@ -44,7 +45,9 @@ class AppUserAdapter extends TypeAdapter<AppUser> {
       ..writeByte(5)
       ..write(obj.lastLoginAt)
       ..writeByte(6)
-      ..write(obj.isRegistered);
+      ..write(obj.isRegistered)
+      ..writeByte(7)
+      ..write(obj.role);
   }
 
   @override

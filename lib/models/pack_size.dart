@@ -13,10 +13,14 @@ class PackSize extends HiveObject {
   @HiveField(2)
   final String? label; // Optional label like "5kg Pack", "250gm Pack"
 
+  @HiveField(3)
+  final int stock; // Number of packs available for this size
+
   PackSize({
     required this.quantity,
     required this.price,
     this.label,
+    this.stock = 0,
   });
 
   // Helper method to generate label from quantity and unit

@@ -34,6 +34,10 @@ class SellerProfileService {
       'pickupLocation': profile.pickupLocation,
       'cookedFoodSource': profile.cookedFoodSource?.name,
       'defaultFoodType': profile.defaultFoodType?.name,
+      'groceryType': profile.groceryType,
+      'sellerType': profile.sellerType,
+      'groceryOnboardingCompleted': profile.groceryOnboardingCompleted,
+      'groceryDocuments': profile.groceryDocuments,
       'updatedAt': FieldValue.serverTimestamp(),
     };
   }
@@ -77,6 +81,10 @@ class SellerProfileService {
         pickupLocation: data['pickupLocation'] as String? ?? '',
         cookedFoodSource: cookedFoodSource,
         defaultFoodType: defaultFoodType,
+        groceryType: data['groceryType'] as String?,
+        sellerType: data['sellerType'] as String?,
+        groceryOnboardingCompleted: data['groceryOnboardingCompleted'] as bool? ?? false,
+        groceryDocuments: (data['groceryDocuments'] as Map<dynamic, dynamic>?)?.cast<String, String>(),
       );
     } catch (e) {
       print('❌ Error converting Firestore data to SellerProfile: $e');
@@ -221,6 +229,10 @@ class SellerProfileService {
     String? fssaiLicense,
     CookedFoodSource? cookedFoodSource,
     SellType? defaultFoodType,
+    String? groceryType,
+    String? sellerType,
+    bool? groceryOnboardingCompleted,
+    Map<String, String>? groceryDocuments,
   }) async {
     final profile = await getProfile(sellerId);
     if (profile != null) {
@@ -228,6 +240,12 @@ class SellerProfileService {
       profile.fssaiLicense = fssaiLicense ?? profile.fssaiLicense;
       profile.cookedFoodSource = cookedFoodSource ?? profile.cookedFoodSource;
       profile.defaultFoodType = defaultFoodType ?? profile.defaultFoodType;
+      if (groceryType != null) profile.groceryType = groceryType;
+      if (sellerType != null) profile.sellerType = sellerType;
+      if (groceryOnboardingCompleted != null) {
+        profile.groceryOnboardingCompleted = groceryOnboardingCompleted;
+      }
+      if (groceryDocuments != null) profile.groceryDocuments = groceryDocuments;
       await saveProfile(profile); // This will save to both Hive and Firestore
     }
   }

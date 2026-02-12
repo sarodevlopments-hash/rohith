@@ -20,19 +20,22 @@ class PackSizeAdapter extends TypeAdapter<PackSize> {
       quantity: fields[0] as double,
       price: fields[1] as double,
       label: fields[2] as String?,
+      stock: fields[3] as int? ?? 0, // Default to 0 if null (for backward compatibility)
     );
   }
 
   @override
   void write(BinaryWriter writer, PackSize obj) {
     writer
-      ..writeByte(3)
+      ..writeByte(4)
       ..writeByte(0)
       ..write(obj.quantity)
       ..writeByte(1)
       ..write(obj.price)
       ..writeByte(2)
-      ..write(obj.label);
+      ..write(obj.label)
+      ..writeByte(3)
+      ..write(obj.stock);
   }
 
   @override
