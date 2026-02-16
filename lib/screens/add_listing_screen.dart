@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
@@ -30,6 +30,10 @@ import '../services/listing_firestore_service.dart';
 import '../services/image_storage_service.dart';
 import 'map_location_picker_screen.dart';
 import 'grocery_onboarding_screen.dart';
+import 'seller_verification_screen.dart';
+import '../models/seller_category.dart';
+import '../services/seller_verification_storage.dart';
+import '../services/seller_verification_service.dart';
 import 'package:hive/hive.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -1098,8 +1102,52 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                                 selectedCategory = FoodCategory.veg;
                               });
                             }
+                          } else if (tempType == SellType.cookedFood || 
+                                     tempType == SellType.liveKitchen || 
+                                     tempType == SellType.clothingAndApparel) {
+                            // Check if verification is already completed
+                            Navigator.of(ctx).pop(null); // Close dialog first
+                            
+                            // Map SellType to SellerCategory
+                            SellerCategory? category;
+                            if (tempType == SellType.cookedFood) {
+                              category = SellerCategory.cookedFood;
+                            } else if (tempType == SellType.liveKitchen) {
+                              category = SellerCategory.liveKitchen;
+                            } else if (tempType == SellType.clothingAndApparel) {
+                              category = SellerCategory.clothesApparel;
+                            }
+                            
+                            if (category != null) {
+                              // Check if verification is already completed
+                              final hasCompletedVerification = await SellerVerificationStorage.isVerificationCompleted(category);
+                              debugPrint('🔍 Verification check for ${category.name}: $hasCompletedVerification');
+                              
+                              if (!hasCompletedVerification) {
+                                // First time - show verification screen
+                                debugPrint('📋 Showing verification screen for ${category.name}');
+                                await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => SellerVerificationScreen(
+                                      initialCategory: category,
+                                    ),
+                                  ),
+                                );
+                                // Re-check after returning from verification screen
+                                final nowCompleted = await SellerVerificationStorage.isVerificationCompleted(category);
+                                debugPrint('🔍 Verification check after screen: $nowCompleted');
+                              } else {
+                                debugPrint('✅ Verification already completed for ${category.name}, skipping screen');
+                              }
+                              
+                              // Apply the selected type (whether verification was shown or already completed)
+                              if (mounted) {
+                                _applySelectedType(tempType);
+                              }
+                            }
                           } else {
-                            // For other types, return the selected type normally
+                            // For other types (vegetables), return the selected type normally
                             Navigator.of(ctx).pop(tempType);
                           }
                         },
@@ -1911,6 +1959,72 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
           ),
         );
         return;
+      }
+    }
+
+    // Validate verification for Cooked Food, Live Kitchen, and Clothes & Apparel
+    if (selectedType == SellType.cookedFood || 
+        selectedType == SellType.liveKitchen || 
+        selectedType == SellType.clothingAndApparel) {
+      SellerCategory? category;
+      if (selectedType == SellType.cookedFood) {
+        category = SellerCategory.cookedFood;
+      } else if (selectedType == SellType.liveKitchen) {
+        category = SellerCategory.liveKitchen;
+      } else if (selectedType == SellType.clothingAndApparel) {
+        category = SellerCategory.clothesApparel;
+      }
+
+      if (category != null) {
+        final isVerified = await SellerVerificationStorage.isVerificationCompleted(category);
+        if (!isVerified) {
+          // Check if bank details and mandatory documents are uploaded
+          final bankDetails = await SellerVerificationStorage.getBankDetails(category);
+          final hasBankDetails = bankDetails != null && bankDetails.isNotEmpty;
+          final mandatoryDocs = SellerVerificationService.getCategoryMandatoryDocuments(category);
+          final uploadedDocsCount = await SellerVerificationStorage.getUploadedDocumentsCount(category);
+          
+          // Check if all mandatory documents are uploaded
+          final box = await SellerVerificationStorage.getBox();
+          final documentsKey = '${category.name}_documents';
+          final documents = box.get(documentsKey);
+          final uploadedDocs = documents != null && documents is Map ? documents as Map : <String, dynamic>{};
+          
+          final allMandatoryUploaded = mandatoryDocs.every(
+            (doc) => uploadedDocs.containsKey(doc) && uploadedDocs[doc] != null,
+          );
+
+          if (!hasBankDetails || !allMandatoryUploaded) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Please complete verification before posting ${category.displayName.toLowerCase()} items',
+                ),
+                backgroundColor: AppTheme.errorColor,
+                duration: const Duration(seconds: 4),
+                action: SnackBarAction(
+                  label: 'Verify Now',
+                  textColor: Colors.white,
+                  onPressed: () async {
+                    // Navigate to verification screen
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => SellerVerificationScreen(
+                          initialCategory: category,
+                        ),
+                      ),
+                    );
+                    if (mounted) {
+                      setState(() {});
+                    }
+                  },
+                ),
+              ),
+            );
+            return;
+          }
+        }
       }
     }
 
@@ -2805,6 +2919,378 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
     );
   }
 
+  /// Get verification status for a sell type
+  Future<Map<String, dynamic>> _getVerificationStatus(SellType sellType) async {
+    SellerCategory? category;
+    if (sellType == SellType.cookedFood) {
+      category = SellerCategory.cookedFood;
+    } else if (sellType == SellType.liveKitchen) {
+      category = SellerCategory.liveKitchen;
+    } else if (sellType == SellType.clothingAndApparel) {
+      category = SellerCategory.clothesApparel;
+    }
+
+    if (category == null) {
+      return {
+        'isCompleted': false,
+        'hasBankDetails': false,
+        'uploadedDocsCount': 0,
+        'totalDocsCount': 0,
+        'category': null,
+      };
+    }
+
+    final isCompleted = await SellerVerificationStorage.isVerificationCompleted(category);
+    final bankDetails = await SellerVerificationStorage.getBankDetails(category);
+    final hasBankDetails = bankDetails != null && bankDetails.isNotEmpty;
+    final uploadedDocsCount = await SellerVerificationStorage.getUploadedDocumentsCount(category);
+    final totalDocsCount = SellerVerificationService.getCategoryDocuments(category).length;
+
+    return {
+      'isCompleted': isCompleted,
+      'hasBankDetails': hasBankDetails,
+      'uploadedDocsCount': uploadedDocsCount,
+      'totalDocsCount': totalDocsCount,
+      'category': category,
+    };
+  }
+
+  Widget _buildVerificationRegistrationInfoCard(SellType sellType, Map<String, dynamic> status) {
+    final category = status['category'] as SellerCategory?;
+    if (category == null) return const SizedBox.shrink();
+
+    final isCompleted = status['isCompleted'] as bool? ?? false;
+    final hasBankDetails = status['hasBankDetails'] as bool? ?? false;
+    final uploadedDocsCount = status['uploadedDocsCount'] as int? ?? 0;
+    final totalDocsCount = status['totalDocsCount'] as int? ?? 0;
+    
+    // Determine badge and color based on verification status
+    String badgeText = 'Pending Verification';
+    Color badgeColor = AppTheme.warningColor; // Amber/Warning color for pending
+    IconData badgeIcon = Icons.pending;
+    
+    if (isCompleted) {
+      badgeText = 'Verified Seller';
+      badgeColor = AppTheme.successColor; // Green for verified
+      badgeIcon = Icons.verified;
+    } else if (hasBankDetails && uploadedDocsCount > 0) {
+      badgeText = 'Partially Verified';
+      badgeColor = AppTheme.warningColor; // Orange for partial
+      badgeIcon = Icons.pending_actions;
+    }
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            badgeColor.withValues(alpha: 0.08),
+            badgeColor.withValues(alpha: 0.03),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: badgeColor.withValues(alpha: 0.3),
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: badgeColor.withValues(alpha: 0.15),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header with badge
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: badgeColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    badgeIcon,
+                    color: badgeColor,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Registration Details',
+                        style: AppTheme.heading4.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.darkText,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: badgeColor.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          badgeText,
+                          style: AppTheme.bodySmall.copyWith(
+                            color: badgeColor,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Edit button
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () async {
+                      // Navigate to verification screen to edit
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => SellerVerificationScreen(
+                            initialCategory: category,
+                          ),
+                        ),
+                      );
+                      
+                      // Reload status after editing
+                      if (mounted) {
+                        setState(() {});
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: badgeColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        Icons.edit,
+                        color: badgeColor,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Registration details
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.7),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: badgeColor.withValues(alpha: 0.2),
+                  width: 1,
+                ),
+              ),
+              child: Column(
+                children: [
+                  // Category
+                  Row(
+                    children: [
+                      Icon(
+                        category.icon,
+                        size: 18,
+                        color: Colors.grey.shade600,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Category',
+                              style: AppTheme.bodySmall.copyWith(
+                                color: Colors.grey.shade600,
+                                fontSize: 11,
+                              ),
+                            ),
+                            Text(
+                              category.displayName,
+                              style: AppTheme.bodyMedium.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.darkText,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  
+                  // Bank Details status
+                  const SizedBox(height: 12),
+                  Divider(height: 1, color: Colors.grey.shade300),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.account_balance,
+                        size: 18,
+                        color: hasBankDetails ? Colors.grey.shade600 : AppTheme.errorColor,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Bank Details',
+                              style: AppTheme.bodySmall.copyWith(
+                                color: Colors.grey.shade600,
+                                fontSize: 11,
+                              ),
+                            ),
+                            Text(
+                              hasBankDetails ? 'Completed' : 'Not provided',
+                              style: AppTheme.bodyMedium.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: hasBankDetails ? AppTheme.successColor : AppTheme.errorColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(
+                        hasBankDetails ? Icons.check_circle : Icons.warning,
+                        size: 18,
+                        color: hasBankDetails ? AppTheme.successColor : AppTheme.errorColor,
+                      ),
+                    ],
+                  ),
+                  
+                  // Documents status
+                  const SizedBox(height: 12),
+                  Divider(height: 1, color: Colors.grey.shade300),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.description,
+                        size: 18,
+                        color: uploadedDocsCount > 0 ? Colors.grey.shade600 : AppTheme.errorColor,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Documents',
+                              style: AppTheme.bodySmall.copyWith(
+                                color: Colors.grey.shade600,
+                                fontSize: 11,
+                              ),
+                            ),
+                            Text(
+                              uploadedDocsCount > 0 
+                                ? '$uploadedDocsCount/$totalDocsCount uploaded'
+                                : 'No documents uploaded',
+                              style: AppTheme.bodyMedium.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: uploadedDocsCount > 0 ? AppTheme.successColor : AppTheme.errorColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(
+                        uploadedDocsCount > 0 ? Icons.check_circle : Icons.warning,
+                        size: 18,
+                        color: uploadedDocsCount > 0 ? AppTheme.successColor : AppTheme.errorColor,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            
+            const SizedBox(height: 12),
+            
+            // Warning or Helper text based on verification status
+            if (!isCompleted) ...[
+              // Warning banner when not verified
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.errorColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: AppTheme.errorColor.withValues(alpha: 0.3),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      size: 16,
+                      color: AppTheme.errorColor,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Complete verification to start selling ${category.displayName.toLowerCase()}',
+                        style: AppTheme.bodySmall.copyWith(
+                          color: AppTheme.errorColor,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ] else ...[
+              // Helper text when verified
+              Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    size: 14,
+                    color: Colors.grey.shade500,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Tap the edit icon to update your verification details',
+                      style: AppTheme.bodySmall.copyWith(
+                        color: Colors.grey.shade600,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildModernTextField({
     required TextEditingController controller,
     required String label,
@@ -3199,6 +3685,23 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
             // Grocery Registration Info Card (shows when groceries is selected)
             if (selectedType == SellType.groceries && sellerProfile != null) ...[
               _buildGroceryRegistrationInfoCard(),
+              const SizedBox(height: 16),
+            ],
+
+            // Verification Registration Info Cards (for Cooked Food, Live Kitchen, Clothes & Apparel)
+            if (selectedType == SellType.cookedFood || 
+                selectedType == SellType.liveKitchen || 
+                selectedType == SellType.clothingAndApparel) ...[
+              FutureBuilder<Map<String, dynamic>>(
+                future: _getVerificationStatus(selectedType),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const SizedBox.shrink();
+                  }
+                  final status = snapshot.data ?? {};
+                  return _buildVerificationRegistrationInfoCard(selectedType, status);
+                },
+              ),
               const SizedBox(height: 16),
             ],
 
@@ -6763,6 +7266,71 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
         );
       }
       return;
+    }
+
+    // Validate verification for pending items that require verification
+    for (final item in pendingItems) {
+      SellerCategory? category;
+      if (item.type == SellType.cookedFood) {
+        category = SellerCategory.cookedFood;
+      } else if (item.type == SellType.liveKitchen) {
+        category = SellerCategory.liveKitchen;
+      } else if (item.type == SellType.clothingAndApparel) {
+        category = SellerCategory.clothesApparel;
+      }
+
+      if (category != null) {
+        final isVerified = await SellerVerificationStorage.isVerificationCompleted(category);
+        if (!isVerified) {
+          // Check if bank details and mandatory documents are uploaded
+          final bankDetails = await SellerVerificationStorage.getBankDetails(category);
+          final hasBankDetails = bankDetails != null && bankDetails.isNotEmpty;
+          final mandatoryDocs = SellerVerificationService.getCategoryMandatoryDocuments(category);
+          
+          // Check if all mandatory documents are uploaded
+          final box = await SellerVerificationStorage.getBox();
+          final documentsKey = '${category.name}_documents';
+          final documents = box.get(documentsKey);
+          final uploadedDocs = documents != null && documents is Map ? documents as Map : <String, dynamic>{};
+          
+          final allMandatoryUploaded = mandatoryDocs.every(
+            (doc) => uploadedDocs.containsKey(doc) && uploadedDocs[doc] != null,
+          );
+
+          if (!hasBankDetails || !allMandatoryUploaded) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    'Please complete verification for ${category.displayName} before posting items',
+                  ),
+                  backgroundColor: AppTheme.errorColor,
+                  duration: const Duration(seconds: 4),
+                  action: SnackBarAction(
+                    label: 'Verify Now',
+                    textColor: Colors.white,
+                    onPressed: () async {
+                      // Navigate to verification screen
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => SellerVerificationScreen(
+                            initialCategory: category,
+                          ),
+                        ),
+                      );
+                      if (mounted) {
+                        setState(() {});
+                      }
+                    },
+                  ),
+                ),
+              );
+            }
+            return;
+          }
+        }
+      }
     }
 
     // Store count before clearing
