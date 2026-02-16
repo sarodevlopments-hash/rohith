@@ -104,6 +104,8 @@ void main() async {
     await Hive.openBox<String>('recentlyViewedBox');
     // ✅ Track which accepted-order notifications have already been shown (buyer side)
     await Hive.openBox('acceptedOrderNotificationsBox');
+    // ✅ Open box for seller verification status
+    await Hive.openBox('sellerVerificationBox');
 
     // ✅ Init local notifications (foreground/heads-up)
     await NotificationService.init();

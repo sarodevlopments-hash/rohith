@@ -463,7 +463,7 @@ class NotificationService {
                 firestoreStatus == 'Confirmed' ||
                 firestoreStatus == 'Completed' ||
                 firestoreStatus == 'Cancelled') {
-              debugPrint('[NotificationService] Order ${order.orderId} already ${firestoreStatus} in Firestore, marking as dismissed');
+              debugPrint('[NotificationService] Order ${order.orderId} already $firestoreStatus in Firestore, marking as dismissed');
               _dismissedNotifications.add(notificationKey);
               shouldShow = false;
             } else {
@@ -809,13 +809,12 @@ class _NewOrderNotificationCard extends StatelessWidget {
   final VoidCallback onView;
 
   const _NewOrderNotificationCard({
-    Key? key,
     required this.title,
     required this.orderLine,
     required this.orderId,
     this.pendingText,
     required this.onView,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -837,13 +836,13 @@ class _NewOrderNotificationCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: backgroundColor.withOpacity(0.3),
+              color: backgroundColor.withValues(alpha: 0.3),
               blurRadius: 20,
               spreadRadius: 0,
               offset: const Offset(0, 4),
             ),
             BoxShadow(
-              color: Colors.black.withOpacity(0.08),
+              color: Colors.black.withValues(alpha: 0.08),
               blurRadius: 12,
               spreadRadius: 0,
               offset: const Offset(0, 2),
@@ -857,7 +856,7 @@ class _NewOrderNotificationCard extends StatelessWidget {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: onBackgroundColor.withOpacity(0.2),
+                color: onBackgroundColor.withValues(alpha: 0.2),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -893,12 +892,12 @@ class _NewOrderNotificationCard extends StatelessWidget {
                     style: theme.textTheme.bodySmall?.copyWith(
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
-                          color: onBackgroundColor.withOpacity(0.95),
+                          color: onBackgroundColor.withValues(alpha: 0.95),
                         ) ??
                         TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
-                          color: onBackgroundColor.withOpacity(0.95),
+                          color: onBackgroundColor.withValues(alpha: 0.95),
                         ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -915,12 +914,12 @@ class _NewOrderNotificationCard extends StatelessWidget {
                               style: theme.textTheme.labelSmall?.copyWith(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w500,
-                                    color: onBackgroundColor.withOpacity(0.9),
+                                    color: onBackgroundColor.withValues(alpha: 0.9),
                                   ) ??
                                   TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w500,
-                                    color: onBackgroundColor.withOpacity(0.9),
+                                    color: onBackgroundColor.withValues(alpha: 0.9),
                                   ),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -931,7 +930,7 @@ class _NewOrderNotificationCard extends StatelessWidget {
                             ' • ',
                             style: TextStyle(
                               fontSize: 11,
-                              color: onBackgroundColor.withOpacity(0.6),
+                              color: onBackgroundColor.withValues(alpha: 0.6),
                             ),
                           ),
                         if (orderId.isNotEmpty)
@@ -941,12 +940,12 @@ class _NewOrderNotificationCard extends StatelessWidget {
                               style: theme.textTheme.labelSmall?.copyWith(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w500,
-                                    color: onBackgroundColor.withOpacity(0.8),
+                                    color: onBackgroundColor.withValues(alpha: 0.8),
                                   ) ??
                                   TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w500,
-                                    color: onBackgroundColor.withOpacity(0.8),
+                                    color: onBackgroundColor.withValues(alpha: 0.8),
                                   ),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -998,11 +997,10 @@ class _BuyerNotificationActionChip extends StatelessWidget {
   final VoidCallback onTap;
 
   const _BuyerNotificationActionChip({
-    Key? key,
     required this.icon,
     required this.label,
     required this.onTap,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
