@@ -5,8 +5,15 @@ import 'package:cloud_firestore/cloud_firestore.dart' hide Order;
 import '../models/order.dart';
 import 'order_details_screen.dart';
 import '../services/order_firestore_service.dart';
+import '../services/product_review_service.dart';
+import '../services/seller_review_service.dart';
 import '../widgets/seller_name_widget.dart';
 import '../theme/app_theme.dart';
+import 'write_product_review_screen.dart';
+import 'write_seller_review_screen.dart';
+import 'order_details_screen.dart';
+import '../models/listing.dart';
+import 'package:hive/hive.dart';
 
 class BuyerOrdersScreen extends StatefulWidget {
   const BuyerOrdersScreen({super.key});
@@ -1115,10 +1122,120 @@ class _BuyerOrdersContentState extends State<BuyerOrdersContent> {
                   ),
                 ],
               ),
+              // Review buttons for completed orders
+              if (order.orderStatus == 'Completed') ...[
+                const SizedBox(height: 12),
+                const Divider(height: 1),
+                const SizedBox(height: 12),
+                _buildReviewButtons(order),
+              ],
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildReviewButtons(Order order) {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      return const SizedBox.shrink();
+    }
+
+    // Get listing for product review
+    final listingBox = Hive.box<Listing>('listingBox');
+    Listing? listing;
+    try {
+      final listingKey = int.tryParse(order.listingId);
+      if (listingKey != null) {
+        listing = listingBox.get(listingKey);
+      }
+    } catch (e) {
+      // Listing might not exist
+    }
+
+    return FutureBuilder<Map<String, bool>>(
+      future: Future.wait([
+        ProductReviewService.canReviewProduct(
+          buyerId: currentUser.uid,
+          productId: order.listingId,
+          orderId: order.orderId,
+        ),
+        SellerReviewService.canReviewSeller(
+          buyerId: currentUser.uid,
+          sellerId: order.sellerId,
+          orderId: order.orderId,
+        ),
+      ]).then((results) => {
+        'canReviewProduct': results[0],
+        'canReviewSeller': results[1],
+      }),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const SizedBox.shrink();
+        }
+
+        final canReviewProduct = snapshot.data?['canReviewProduct'] ?? false;
+        final canReviewSeller = snapshot.data?['canReviewSeller'] ?? false;
+
+        if (!canReviewProduct && !canReviewSeller) {
+          return const SizedBox.shrink(); // Already reviewed
+        }
+
+        return Row(
+          children: [
+            if (canReviewProduct && listing != null)
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    final result = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => WriteProductReviewScreen(
+                          order: order,
+                          listing: listing!,
+                        ),
+                      ),
+                    );
+                    if (result == true && mounted) {
+                      setState(() {});
+                    }
+                  },
+                  icon: const Icon(Icons.star_outline, size: 18),
+                  label: const Text('Review Product'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                  ),
+                ),
+              ),
+            if (canReviewProduct && listing != null && canReviewSeller)
+              const SizedBox(width: 8),
+            if (canReviewSeller)
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    final result = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => WriteSellerReviewScreen(
+                          order: order,
+                        ),
+                      ),
+                    );
+                    if (result == true && mounted) {
+                      setState(() {});
+                    }
+                  },
+                  icon: const Icon(Icons.store_outlined, size: 18),
+                  label: const Text('Review Seller'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 

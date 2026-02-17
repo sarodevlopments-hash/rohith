@@ -12,13 +12,25 @@ import '../models/listing.dart';
 import '../models/measurement_unit.dart';
 import '../services/order_firestore_service.dart';
 import '../services/seller_profile_service.dart';
+import '../services/product_review_service.dart';
+import '../services/seller_review_service.dart';
 import '../widgets/seller_name_widget.dart';
 import '../theme/app_theme.dart';
+import 'write_product_review_screen.dart';
+import 'write_seller_review_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
-class OrderDetailsScreen extends StatelessWidget {
+class OrderDetailsScreen extends StatefulWidget {
   final Order order;
 
   const OrderDetailsScreen({super.key, required this.order});
+
+  @override
+  State<OrderDetailsScreen> createState() => _OrderDetailsScreenState();
+}
+
+class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
+  Order get order => widget.order;
 
   @override
   Widget build(BuildContext context) {
@@ -317,6 +329,54 @@ class OrderDetailsScreen extends StatelessWidget {
 
                   const Divider(),
                   const SizedBox(height: 16),
+
+                  // Review Section (for buyer view only)
+                  if (!isSellerView) ...[
+                    if (order.orderStatus == 'Completed') ...[
+                      _buildReviewSection(context, listing),
+                      const Divider(),
+                      const SizedBox(height: 16),
+                    ] else ...[
+                      // Show helpful message for non-completed orders
+                      Card(
+                        color: Colors.amber.shade50,
+                        margin: const EdgeInsets.only(bottom: 16),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Row(
+                            children: [
+                              Icon(Icons.info_outline, color: Colors.amber.shade700, size: 24),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Reviews Available After Completion',
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Current status: ${order.orderStatus}. Reviews will appear here once the seller marks the order as "Completed".',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.grey.shade700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const Divider(),
+                      const SizedBox(height: 16),
+                    ],
+                  ],
 
                   // Price Breakdown
                   const Text(
@@ -650,6 +710,183 @@ class OrderDetailsScreen extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildReviewSection(BuildContext context, Listing? listing) {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      return const SizedBox.shrink();
+    }
+
+    if (listing == null) {
+      return Card(
+        color: Colors.orange.shade50,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.orange.shade700),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Review Unavailable',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Product listing not found. Reviews are only available for active products.',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return FutureBuilder<Map<String, bool>>(
+      future: Future.wait([
+        ProductReviewService.canReviewProduct(
+          buyerId: currentUser.uid,
+          productId: order.listingId,
+          orderId: order.orderId,
+        ),
+        SellerReviewService.canReviewSeller(
+          buyerId: currentUser.uid,
+          sellerId: order.sellerId,
+          orderId: order.orderId,
+        ),
+      ]).then((results) => {
+        'canReviewProduct': results[0],
+        'canReviewSeller': results[1],
+      }),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Card(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          );
+        }
+
+        final canReviewProduct = snapshot.data?['canReviewProduct'] ?? false;
+        final canReviewSeller = snapshot.data?['canReviewSeller'] ?? false;
+
+        // Show message if can't review
+        if (!canReviewProduct && !canReviewSeller) {
+          return Card(
+            color: Colors.blue.shade50,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Icon(Icons.check_circle_outline, color: Colors.blue.shade700),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'You have already reviewed this order, or the order is not eligible for review.',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Write a Review',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Share your experience to help other buyers',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey.shade600,
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (canReviewProduct) ...[
+              ElevatedButton.icon(
+                onPressed: () async {
+                  final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => WriteProductReviewScreen(
+                        order: order,
+                        listing: listing,
+                      ),
+                    ),
+                  );
+                  if (result == true && mounted) {
+                    // Refresh the screen to update review status
+                    setState(() {});
+                  }
+                },
+                icon: const Icon(Icons.star_outline),
+                label: const Text('Review Product'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryColor,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (canReviewSeller)
+              ElevatedButton.icon(
+                onPressed: () async {
+                  final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => WriteSellerReviewScreen(
+                        order: order,
+                      ),
+                    ),
+                  );
+                  if (result == true && mounted) {
+                    // Refresh the screen to update review status
+                    setState(() {});
+                  }
+                },
+                icon: const Icon(Icons.store_outlined),
+                label: const Text('Review Seller'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.secondaryColor,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 

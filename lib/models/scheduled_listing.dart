@@ -56,17 +56,22 @@ class ScheduledListing extends HiveObject {
     required this.scheduleType,
     required this.scheduleStartDate,
     this.scheduleEndDate,
-    required TimeOfDay scheduleTime,
+    TimeOfDay? scheduleTime,
     TimeOfDay? scheduleCloseTime,
     this.dayOfWeek,
     required this.sellerId,
     this.lastPostedAt,
     this.isActive = true,
     required this.createdAt,
-  }) : scheduleTimeHour = scheduleTime.hour,
-       scheduleTimeMinute = scheduleTime.minute,
-       scheduleCloseTimeHour = scheduleCloseTime?.hour,
-       scheduleCloseTimeMinute = scheduleCloseTime?.minute;
+    // Allow direct hour/minute for Hive deserialization
+    int? scheduleTimeHour,
+    int? scheduleTimeMinute,
+    int? scheduleCloseTimeHour,
+    int? scheduleCloseTimeMinute,
+  }) : scheduleTimeHour = scheduleTimeHour ?? scheduleTime?.hour ?? 0,
+       scheduleTimeMinute = scheduleTimeMinute ?? scheduleTime?.minute ?? 0,
+       scheduleCloseTimeHour = scheduleCloseTimeHour ?? scheduleCloseTime?.hour,
+       scheduleCloseTimeMinute = scheduleCloseTimeMinute ?? scheduleCloseTime?.minute;
 
   // Factory constructor for Hive deserialization (uses raw hour/minute values)
   factory ScheduledListing.fromHive({

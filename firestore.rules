@@ -95,6 +95,50 @@ service cloud.firestore {
       }
     }
     
+    // Product Reviews Collection
+    // - Anyone authenticated can read reviews (for displaying on product pages)
+    // - Buyers can create reviews for products they purchased
+    // - Buyers can update their own reviews (within 24 hours)
+    // - Owners have full access
+    match /productReviews/{reviewId} {
+      // Allow owners to read any review (including collection queries)
+      allow read: if isOwner();
+      // Allow authenticated users to read reviews
+      allow read: if request.auth != null;
+      // Allow buyers to create reviews where they are the buyer
+      allow create: if request.auth != null && 
+        request.resource.data.buyerId == request.auth.uid;
+      // Allow buyers to update their own reviews (within 24 hours)
+      allow update: if request.auth != null && 
+        resource.data.buyerId == request.auth.uid &&
+        (request.resource.data.createdAt == resource.data.createdAt || isOwner());
+      // Allow buyers to delete their own reviews, or owners to delete any
+      allow delete: if request.auth != null && 
+        (resource.data.buyerId == request.auth.uid || isOwner());
+    }
+    
+    // Seller Reviews Collection
+    // - Anyone authenticated can read reviews (for displaying on seller profiles)
+    // - Buyers can create reviews for sellers they purchased from
+    // - Buyers can update their own reviews (within 24 hours)
+    // - Owners have full access
+    match /sellerReviews/{reviewId} {
+      // Allow owners to read any review (including collection queries)
+      allow read: if isOwner();
+      // Allow authenticated users to read reviews
+      allow read: if request.auth != null;
+      // Allow buyers to create reviews where they are the buyer
+      allow create: if request.auth != null && 
+        request.resource.data.buyerId == request.auth.uid;
+      // Allow buyers to update their own reviews (within 24 hours)
+      allow update: if request.auth != null && 
+        resource.data.buyerId == request.auth.uid &&
+        (request.resource.data.createdAt == resource.data.createdAt || isOwner());
+      // Allow buyers to delete their own reviews, or owners to delete any
+      allow delete: if request.auth != null && 
+        (resource.data.buyerId == request.auth.uid || isOwner());
+    }
+    
     // Default: deny all other access
     match /{document=**} {
       allow read, write: if false;

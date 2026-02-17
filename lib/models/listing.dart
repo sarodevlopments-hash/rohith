@@ -99,6 +99,12 @@ class Listing extends HiveObject {
   @HiveField(28)
   final Map<String, String>? colorImages; // Map of color name to image path (e.g., {"Red": "/path/to/red.jpg", "Blue": "/path/to/blue.jpg"})
 
+  @HiveField(29, defaultValue: 0.0)
+  final double averageRating; // Average product rating (0.0 to 5.0)
+
+  @HiveField(30, defaultValue: 0)
+  final int reviewCount; // Total number of reviews
+
   Listing({
     required this.name,
     required this.sellerName,
@@ -129,6 +135,8 @@ class Listing extends HiveObject {
     this.availableColors,
     this.sizeColorCombinations,
     this.colorImages,
+    this.averageRating = 0.0,
+    this.reviewCount = 0,
   });
 
   // Helper method to check if listing has multiple pack sizes

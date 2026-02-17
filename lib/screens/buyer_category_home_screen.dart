@@ -517,7 +517,7 @@ class _BuyerCategoryHomeScreenState extends State<BuyerCategoryHomeScreen> {
                       title: 'Live Kitchen',
                       icon: Icons.local_dining,
                       emoji: '🔥',
-                      imagePath: 'assets/images/categories/live_kitchen.jpg',
+                      imagePath: 'assets/images/categories/live kitchen.png',
                       color: Colors.red,
                     ),
                 ],

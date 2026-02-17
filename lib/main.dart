@@ -19,6 +19,8 @@ import 'models/measurement_unit.dart';
 import 'models/pack_size.dart';
 import 'models/schedule_type.dart';
 import 'models/scheduled_listing.dart';
+import 'models/product_review.dart';
+import 'models/seller_review.dart';
 import 'models/rating.dart';
 import 'models/app_user.dart';
 import 'models/buyer_address.dart';
@@ -88,6 +90,8 @@ void main() async {
   Hive.registerAdapter(PackSizeAdapter());
   Hive.registerAdapter(ScheduleTypeAdapter());
   Hive.registerAdapter(ScheduledListingAdapter());
+  Hive.registerAdapter(ProductReviewAdapter());
+  Hive.registerAdapter(SellerReviewAdapter());
 
     // ✅ Open boxes (ONLY ONCE) - All boxes must be opened here for persistence
     await Hive.openBox<Listing>('listingBox');
@@ -106,6 +110,9 @@ void main() async {
     await Hive.openBox('acceptedOrderNotificationsBox');
     // ✅ Open box for seller verification status
     await Hive.openBox('sellerVerificationBox');
+    // ✅ Open boxes for reviews
+    await Hive.openBox<ProductReview>('productReviewsBox');
+    await Hive.openBox<SellerReview>('sellerReviewsBox');
 
     // ✅ Init local notifications (foreground/heads-up)
     await NotificationService.init();

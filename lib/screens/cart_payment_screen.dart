@@ -34,12 +34,52 @@ class _CartPaymentScreenState extends State<CartPaymentScreen> {
   final TextEditingController _cardCvvController = TextEditingController();
   final TextEditingController _buyerLocationController = TextEditingController();
 
-  double get _total => widget.items.fold<double>(0, (sum, i) => sum + i.total);
-  double get _originalTotal => widget.items.fold<double>(
-        0,
-        (sum, i) => sum + ((i.originalPrice ?? i.price) * i.quantity),
+  double get _total {
+    if (widget.items.isEmpty) return 0.0;
+    try {
+      return widget.items.fold<double>(0.0, (sum, i) {
+        // Safely get total, handling potential nulls
+        final itemPrice = i.price;
+        if (itemPrice == null || itemPrice.isNaN || itemPrice.isInfinite) {
+          return sum;
+        }
+        final itemTotal = itemPrice * (i.quantity);
+        if (itemTotal.isNaN || itemTotal.isInfinite) return sum;
+        return sum + itemTotal;
+      });
+    } catch (e) {
+      debugPrint('Error calculating total: $e');
+      return 0.0;
+    }
+  }
+  
+  double get _originalTotal {
+    if (widget.items.isEmpty) return 0.0;
+    try {
+      return widget.items.fold<double>(
+        0.0,
+        (sum, i) {
+          // Safely get price, handling potential nulls
+          final itemPrice = i.price;
+          final originalPrice = i.originalPrice;
+          final price = (originalPrice ?? itemPrice);
+          
+          if (price == null || price.isNaN || price.isInfinite) {
+            return sum;
+          }
+          final qty = i.quantity;
+          final itemTotal = price * qty;
+          if (itemTotal.isNaN || itemTotal.isInfinite) return sum;
+          return sum + itemTotal;
+        },
       );
-  double get _savings => (_originalTotal - _total).clamp(0, double.infinity);
+    } catch (e) {
+      debugPrint('Error calculating original total: $e');
+      return 0.0;
+    }
+  }
+  
+  double get _savings => (_originalTotal - _total).clamp(0.0, double.infinity);
 
   @override
   void dispose() {
@@ -206,16 +246,21 @@ class _CartPaymentScreenState extends State<CartPaymentScreen> {
       debugPrint('[CartPayment] Listing type: ${firstListing?.type}');
       debugPrint('[CartPayment] Listing isLiveKitchen: ${firstListing?.isLiveKitchen}');
       
+      // Ensure all price values are valid doubles (not null)
+      final finalTotal = _total.isNaN || _total.isInfinite ? 0.0 : _total;
+      final finalOriginalTotal = _originalTotal.isNaN || _originalTotal.isInfinite ? finalTotal : _originalTotal;
+      final finalSavings = _savings.isNaN || _savings.isInfinite ? 0.0 : _savings;
+      
       final order = Order(
         foodName: itemSummary,
         sellerName: sellerName,
-        pricePaid: _total,
-        savedAmount: _savings,
+        pricePaid: finalTotal,
+        savedAmount: finalSavings,
         purchasedAt: now,
         listingId: widget.items.first.listingId,
         quantity: totalQty, // This is the total number of packs/items
-        originalPrice: _originalTotal,
-        discountedPrice: _total,
+        originalPrice: finalOriginalTotal,
+        discountedPrice: finalTotal,
         userId: currentUser.uid,
         sellerId: sellerId,
         orderStatus: orderStatus,
