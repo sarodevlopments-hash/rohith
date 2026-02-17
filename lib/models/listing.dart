@@ -105,6 +105,12 @@ class Listing extends HiveObject {
   @HiveField(30, defaultValue: 0)
   final int reviewCount; // Total number of reviews
 
+  @HiveField(31, defaultValue: false)
+  final bool? isFeatured; // Whether this listing is featured/sponsored (nullable for backward compatibility)
+
+  @HiveField(32, defaultValue: 0)
+  final int? featuredPriority; // Priority level for featured listings (higher = shown first) (nullable for backward compatibility)
+
   Listing({
     required this.name,
     required this.sellerName,
@@ -137,7 +143,10 @@ class Listing extends HiveObject {
     this.colorImages,
     this.averageRating = 0.0,
     this.reviewCount = 0,
-  });
+    bool? isFeatured,
+    int? featuredPriority,
+  }) : isFeatured = isFeatured ?? false,
+       featuredPriority = featuredPriority ?? 0;
 
   // Helper method to check if listing has multiple pack sizes
   bool get hasMultiplePackSizes => packSizes != null && packSizes!.length > 1;
