@@ -8,15 +8,19 @@ import '../theme/app_theme.dart';
 import '../services/image_storage_service.dart';
 import '../services/seller_profile_service.dart';
 import '../services/seller_review_service.dart';
+import '../services/distance_filter_service.dart';
+import '../services/product_review_service.dart';
 
 class CompactProductCard extends StatefulWidget {
   final Listing listing;
   final String? badgeText; // e.g., "Popular", "Best Seller"
+  final ListingWithDistance? listingWithDistance; // Optional distance info
 
   const CompactProductCard({
     super.key,
     required this.listing,
     this.badgeText,
+    this.listingWithDistance,
   });
 
   @override
@@ -25,20 +29,73 @@ class CompactProductCard extends StatefulWidget {
 
 class _CompactProductCardState extends State<CompactProductCard> {
   double? _sellerRating;
-  int _reviewCount = 0;
-  bool _isLoadingRating = false;
+  int _sellerReviewCount = 0;
+  bool _isLoadingSellerRating = false;
+  double? _productRating;
+  int _productReviewCount = 0;
+  bool _isLoadingProductRating = false;
 
   @override
   void initState() {
     super.initState();
+    _loadProductRating();
     _loadSellerRating();
+  }
+
+  Future<void> _loadProductRating() async {
+    // If listing already has rating, use it
+    if (widget.listing.averageRating > 0) {
+      if (mounted) {
+        setState(() {
+          _productRating = widget.listing.averageRating;
+          _productReviewCount = widget.listing.reviewCount;
+        });
+      }
+      return;
+    }
+
+    // Otherwise, fetch from reviews
+    setState(() => _isLoadingProductRating = true);
+    try {
+      final reviews = await ProductReviewService.getProductReviews(
+        productId: widget.listing.key.toString(),
+        approvedOnly: true,
+      );
+      
+      if (reviews.isNotEmpty) {
+        final approvedReviews = reviews.where((r) => r.isApproved).toList();
+        final reviewsToUse = approvedReviews.isNotEmpty ? approvedReviews : reviews;
+        final totalRating = reviewsToUse.fold<double>(0.0, (sum, review) => sum + review.rating);
+        final averageRating = (totalRating / reviewsToUse.length);
+        if (mounted) {
+          setState(() {
+            _productRating = averageRating;
+            _productReviewCount = reviewsToUse.length;
+            _isLoadingProductRating = false;
+          });
+        }
+      } else {
+        // No reviews yet
+        if (mounted) {
+          setState(() {
+            _productRating = 0.0;
+            _productReviewCount = 0;
+            _isLoadingProductRating = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoadingProductRating = false);
+      }
+    }
   }
 
   Future<void> _loadSellerRating() async {
     // Only load rating for Cooked Food and Live Kitchen
     if (widget.listing.type == SellType.cookedFood || 
         widget.listing.type == SellType.liveKitchen) {
-      setState(() => _isLoadingRating = true);
+      setState(() => _isLoadingSellerRating = true);
       try {
         // First try to get from profile
         final profile = await SellerProfileService.getProfile(widget.listing.sellerId);
@@ -48,8 +105,8 @@ class _CompactProductCardState extends State<CompactProductCard> {
           if (mounted) {
             setState(() {
               _sellerRating = profile.averageRating;
-              _reviewCount = profile.reviewCount;
-              _isLoadingRating = false;
+              _sellerReviewCount = profile.reviewCount;
+              _isLoadingSellerRating = false;
             });
           }
         } else {
@@ -67,8 +124,8 @@ class _CompactProductCardState extends State<CompactProductCard> {
             if (mounted) {
               setState(() {
                 _sellerRating = averageRating;
-                _reviewCount = reviewsToUse.length;
-                _isLoadingRating = false;
+                _sellerReviewCount = reviewsToUse.length;
+                _isLoadingSellerRating = false;
               });
             }
           } else {
@@ -76,15 +133,15 @@ class _CompactProductCardState extends State<CompactProductCard> {
             if (mounted) {
               setState(() {
                 _sellerRating = 0.0;
-                _reviewCount = 0;
-                _isLoadingRating = false;
+                _sellerReviewCount = 0;
+                _isLoadingSellerRating = false;
               });
             }
           }
         }
       } catch (e) {
         if (mounted) {
-          setState(() => _isLoadingRating = false);
+          setState(() => _isLoadingSellerRating = false);
         }
       }
     }
@@ -254,53 +311,128 @@ class _CompactProductCardState extends State<CompactProductCard> {
 
             // Product Details
             Padding(
-              padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+              padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Product Name
-                  Text(
-                    widget.listing.name,
-                    style: AppTheme.bodyMedium.copyWith(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  
-                  const SizedBox(height: 4),
-
-                  // Price
+                  // Product Name with Product Rating on the right
                   Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: AppTheme.getPriceBadgeDecoration(),
+                      Expanded(
                         child: Text(
-                          '₹${widget.listing.price.toStringAsFixed(0)}',
-                          style: const TextStyle(
+                          widget.listing.name,
+                          style: AppTheme.bodyMedium.copyWith(
+                            fontWeight: FontWeight.w600,
                             fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
                           ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      if (widget.listing.originalPrice != null) ...[
-                        const SizedBox(width: 3),
-                        Flexible(
-                          child: Text(
-                            '₹${widget.listing.originalPrice!.toStringAsFixed(0)}',
-                            style: TextStyle(
-                              fontSize: 9,
-                              color: Colors.grey.shade600,
-                              decoration: TextDecoration.lineThrough,
+                      // Product Rating (next to product name)
+                      if (_isLoadingProductRating)
+                        const SizedBox(
+                          height: 11,
+                          width: 11,
+                          child: CircularProgressIndicator(strokeWidth: 1.5),
+                        )
+                      else if (_productRating != null && _productRating! > 0) ...[
+                        const SizedBox(width: 4),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.star,
+                              size: 11,
+                              color: _getRatingColor(_productRating!),
                             ),
-                            overflow: TextOverflow.ellipsis,
+                            const SizedBox(width: 2),
+                            Text(
+                              _productRating!.toStringAsFixed(1),
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: _getRatingColor(_productRating!),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            if (_productReviewCount > 0) ...[
+                              const SizedBox(width: 2),
+                              Text(
+                                '(${_productReviewCount})',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                  
+                  const SizedBox(height: 3),
+
+                  // Price with Distance on the right
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // Price on the left
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: AppTheme.getPriceBadgeDecoration(),
+                            child: Text(
+                              '₹${widget.listing.price.toStringAsFixed(0)}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
                           ),
+                          if (widget.listing.originalPrice != null) ...[
+                            const SizedBox(width: 3),
+                            Flexible(
+                              child: Text(
+                                '₹${widget.listing.originalPrice!.toStringAsFixed(0)}',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  color: Colors.grey.shade600,
+                                  decoration: TextDecoration.lineThrough,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      // Distance on the right (opposite to price)
+                      if (widget.listingWithDistance?.distanceInMeters != null) ...[
+                        const Spacer(),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.location_on,
+                              size: 12,
+                              color: Colors.blue.shade600,
+                            ),
+                            const SizedBox(width: 2),
+                            Text(
+                              widget.listingWithDistance!.formattedDistance,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.blue.shade600,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ],
@@ -308,61 +440,64 @@ class _CompactProductCardState extends State<CompactProductCard> {
                   
                   // Seller Name & Rating (Only for Cooked Food & Live Kitchen) - Below Price
                   if (shouldShowSeller) ...[
-                    const SizedBox(height: 4),
-                    // Restaurant/Seller Name
-                    Text(
-                      widget.listing.sellerName,
-                      style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.grey.shade700,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    // Rating - Compact display
-                    if (_isLoadingRating)
-                      const SizedBox(
-                        height: 10,
-                        width: 10,
-                        child: CircularProgressIndicator(strokeWidth: 1.5),
-                      )
-                    else if (_sellerRating != null)
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.star,
-                            size: 10,
-                            color: _sellerRating! > 0 
-                                ? _getRatingColor(_sellerRating!) 
-                                : Colors.grey.shade400,
-                          ),
-                          const SizedBox(width: 2),
-                          Text(
-                            _sellerRating! > 0 
-                                ? _sellerRating!.toStringAsFixed(1)
-                                : '0.0',
+                    const SizedBox(height: 3),
+                    // Restaurant/Seller Name with Seller Rating on the right
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            widget.listing.sellerName,
                             style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
-                              color: _sellerRating! > 0 
-                                  ? _getRatingColor(_sellerRating!) 
-                                  : Colors.grey.shade600,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey.shade700,
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          Text(
-                            ' (${_reviewCount})',
-                            style: TextStyle(
-                              fontSize: 8,
-                              color: _reviewCount > 0 
-                                  ? Colors.grey.shade600 
-                                  : Colors.grey.shade400,
-                            ),
+                        ),
+                        // Seller Rating (next to seller name)
+                        if (_isLoadingSellerRating)
+                          const SizedBox(
+                            height: 11,
+                            width: 11,
+                            child: CircularProgressIndicator(strokeWidth: 1.5),
+                          )
+                        else if (_sellerRating != null && _sellerRating! > 0) ...[
+                          const SizedBox(width: 4),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.star,
+                                size: 11,
+                                color: _getRatingColor(_sellerRating!),
+                              ),
+                              const SizedBox(width: 2),
+                              Text(
+                                _sellerRating!.toStringAsFixed(1),
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: _getRatingColor(_sellerRating!),
+                                ),
+                              ),
+                              if (_sellerReviewCount > 0) ...[
+                                const SizedBox(width: 2),
+                                Text(
+                                  '(${_sellerReviewCount})',
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ],
-                      ),
+                      ],
+                    ),
                   ],
                 ],
               ),
