@@ -30,8 +30,10 @@ class _CategoryListingScreenState extends State<CategoryListingScreen> {
   double _maxPrice = 10000;
   bool _showOnlyAvailable = true;
   bool _sortByDiscount = false;
-  String _sortOrder = 'default'; // 'default', 'price_low', 'price_high', 'discount'
+  String _sortOrder = 'default'; // 'default', 'price_low', 'price_high', 'discount', 'nearest', 'rating'
   bool _useLocationFilter = true; // Enable location-based filtering by default
+  double? _selectedDistanceKm = 5.0; // Selected distance in kilometers (default: 5 km, null = no limit)
+  static const List<double> _distanceOptions = [1, 3, 5, 10, 20]; // Distance options in km
 
   @override
   void dispose() {
@@ -104,6 +106,14 @@ class _CategoryListingScreenState extends State<CategoryListingScreen> {
           return discountB.compareTo(discountA);
         });
         break;
+      case 'rating':
+        sorted.sort((a, b) {
+          // Sort by rating (descending), then by review count
+          final ratingCompare = b.averageRating.compareTo(a.averageRating);
+          if (ratingCompare != 0) return ratingCompare;
+          return b.reviewCount.compareTo(a.reviewCount);
+        });
+        break;
       default:
         // Default: sort by discount if enabled, otherwise keep original order
         if (_sortByDiscount) {
@@ -121,6 +131,95 @@ class _CategoryListingScreenState extends State<CategoryListingScreen> {
     }
     
     return sorted;
+  }
+
+  /// Sort listings with distance, prioritizing featured listings first
+  List<ListingWithDistance> _sortListingsWithDistance(List<ListingWithDistance> listingsWithDistance) {
+    final sorted = List<ListingWithDistance>.from(listingsWithDistance);
+    
+    // Separate featured and normal listings
+    final featured = <ListingWithDistance>[];
+    final normal = <ListingWithDistance>[];
+    
+    for (final item in sorted) {
+      // Use null-safe check with default value for existing listings
+      final isFeatured = item.listing.isFeatured ?? false;
+      if (isFeatured) {
+        featured.add(item);
+      } else {
+        normal.add(item);
+      }
+    }
+    
+    // Sort featured by priority (higher first), then by distance
+    featured.sort((a, b) {
+      final priorityA = a.listing.featuredPriority ?? 0;
+      final priorityB = b.listing.featuredPriority ?? 0;
+      final priorityCompare = priorityB.compareTo(priorityA);
+      if (priorityCompare != 0) return priorityCompare;
+      
+      // Then by distance (nearest first)
+      if (a.distanceInMeters == null && b.distanceInMeters == null) return 0;
+      if (a.distanceInMeters == null) return 1;
+      if (b.distanceInMeters == null) return -1;
+      return a.distanceInMeters!.compareTo(b.distanceInMeters!);
+    });
+    
+    // Sort normal listings based on sort order
+    switch (_sortOrder) {
+      case 'nearest':
+        // Sort by distance (nearest first)
+        normal.sort((a, b) {
+          if (a.distanceInMeters == null && b.distanceInMeters == null) return 0;
+          if (a.distanceInMeters == null) return 1;
+          if (b.distanceInMeters == null) return -1;
+          return a.distanceInMeters!.compareTo(b.distanceInMeters!);
+        });
+        break;
+      case 'rating':
+        // Sort by rating (descending), then by distance
+        normal.sort((a, b) {
+          final ratingCompare = b.listing.averageRating.compareTo(a.listing.averageRating);
+          if (ratingCompare != 0) return ratingCompare;
+          if (a.distanceInMeters == null && b.distanceInMeters == null) return 0;
+          if (a.distanceInMeters == null) return 1;
+          if (b.distanceInMeters == null) return -1;
+          return a.distanceInMeters!.compareTo(b.distanceInMeters!);
+        });
+        break;
+      case 'price_low':
+        normal.sort((a, b) {
+          final priceCompare = a.listing.price.compareTo(b.listing.price);
+          if (priceCompare != 0) return priceCompare;
+          if (a.distanceInMeters == null && b.distanceInMeters == null) return 0;
+          if (a.distanceInMeters == null) return 1;
+          if (b.distanceInMeters == null) return -1;
+          return a.distanceInMeters!.compareTo(b.distanceInMeters!);
+        });
+        break;
+      case 'price_high':
+        normal.sort((a, b) {
+          final priceCompare = b.listing.price.compareTo(a.listing.price);
+          if (priceCompare != 0) return priceCompare;
+          if (a.distanceInMeters == null && b.distanceInMeters == null) return 0;
+          if (a.distanceInMeters == null) return 1;
+          if (b.distanceInMeters == null) return -1;
+          return a.distanceInMeters!.compareTo(b.distanceInMeters!);
+        });
+        break;
+      default:
+        // Default: sort by distance (nearest first)
+        normal.sort((a, b) {
+          if (a.distanceInMeters == null && b.distanceInMeters == null) return 0;
+          if (a.distanceInMeters == null) return 1;
+          if (b.distanceInMeters == null) return -1;
+          return a.distanceInMeters!.compareTo(b.distanceInMeters!);
+        });
+        break;
+    }
+    
+    // Combine: featured first, then normal
+    return [...featured, ...normal];
   }
 
   Widget _buildListingList(
@@ -279,6 +378,59 @@ class _CategoryListingScreenState extends State<CategoryListingScreen> {
             ),
             const SizedBox(height: 20),
 
+            // Distance Filter
+            Text(
+              '📍 Distance Filter',
+              style: AppTheme.heading4.copyWith(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _buildFilterChip('No Limit', null, _selectedDistanceKm == null, (v) {
+                  setState(() => _selectedDistanceKm = null);
+                }),
+                ..._distanceOptions.map((distance) => _buildFilterChip(
+                      '${distance.toStringAsFixed(0)} km',
+                      distance,
+                      _selectedDistanceKm == distance,
+                      (v) {
+                        setState(() => _selectedDistanceKm = distance);
+                      },
+                    )),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // Custom Distance Slider
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Custom Distance: ${_selectedDistanceKm != null && _selectedDistanceKm! > 20 ? _selectedDistanceKm!.toStringAsFixed(1) : (_selectedDistanceKm?.toStringAsFixed(0) ?? "No limit")} km',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+                Slider(
+                  value: _selectedDistanceKm ?? 5.0,
+                  min: 0.5,
+                  max: 50.0,
+                  divisions: 99,
+                  label: _selectedDistanceKm != null
+                      ? '${_selectedDistanceKm!.toStringAsFixed(1)} km'
+                      : 'No limit',
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedDistanceKm = value;
+                    });
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
             // Availability Filter
             SwitchListTile(
               title: const Text('Show only available items'),
@@ -310,6 +462,12 @@ class _CategoryListingScreenState extends State<CategoryListingScreen> {
                 }),
                 _buildFilterChip('Best Discount', 'discount', _sortOrder == 'discount', (v) {
                   setState(() => _sortOrder = 'discount');
+                }),
+                _buildFilterChip('Nearest', 'nearest', _sortOrder == 'nearest', (v) {
+                  setState(() => _sortOrder = 'nearest');
+                }),
+                _buildFilterChip('Rating', 'rating', _sortOrder == 'rating', (v) {
+                  setState(() => _sortOrder = 'rating');
                 }),
               ],
             ),
@@ -402,7 +560,7 @@ class _CategoryListingScreenState extends State<CategoryListingScreen> {
                 IconButton(
                   icon: Icon(
                     Icons.tune,
-                    color: (_selectedCategory != null || _minPrice > 0 || _maxPrice < 10000 || _sortOrder != 'default')
+                    color: (_selectedCategory != null || _minPrice > 0 || _maxPrice < 10000 || _sortOrder != 'default' || _selectedDistanceKm != null)
                         ? AppTheme.primaryColor
                         : Colors.grey,
                   ),
@@ -415,6 +573,37 @@ class _CategoryListingScreenState extends State<CategoryListingScreen> {
               ],
             ),
           ),
+
+          // Distance Filter Indicator
+          if (_selectedDistanceKm != null && _useLocationFilter)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              color: Colors.blue.shade50,
+              child: Row(
+                children: [
+                  Icon(Icons.location_on, size: 18, color: Colors.blue.shade700),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Within ${_selectedDistanceKm!.toStringAsFixed(0)} km',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.blue.shade700,
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () {
+                      setState(() => _selectedDistanceKm = null);
+                    },
+                    child: Text(
+                      'Remove',
+                      style: TextStyle(color: Colors.blue.shade700),
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
           // Active Filters
           if (_selectedCategory != null || _minPrice > 0 || _maxPrice < 10000 || _sortOrder != 'default')
@@ -456,7 +645,13 @@ class _CategoryListingScreenState extends State<CategoryListingScreen> {
                                 ? 'Price: Low to High'
                                 : _sortOrder == 'price_high'
                                     ? 'Price: High to Low'
-                                    : 'Best Discount'),
+                                    : _sortOrder == 'discount'
+                                        ? 'Best Discount'
+                                        : _sortOrder == 'nearest'
+                                            ? 'Nearest'
+                                            : _sortOrder == 'rating'
+                                                ? 'Rating'
+                                                : _sortOrder),
                             onDeleted: () {
                               setState(() => _sortOrder = 'default');
                             },
@@ -482,7 +677,10 @@ class _CategoryListingScreenState extends State<CategoryListingScreen> {
                 // Apply distance filtering if enabled
                 if (_useLocationFilter && sortedListings.isNotEmpty) {
                   return FutureBuilder<List<ListingWithDistance>>(
-                    future: DistanceFilterService.filterByDistance(sortedListings),
+                    future: DistanceFilterService.filterByDistance(
+                      sortedListings,
+                      customRadius: _selectedDistanceKm != null ? _selectedDistanceKm! * 1000 : null, // Convert km to meters
+                    ),
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting) {
                         return const Center(
@@ -498,7 +696,10 @@ class _CategoryListingScreenState extends State<CategoryListingScreen> {
 
                       final listingsWithDistance = snapshot.data ?? [];
                       
-                      if (listingsWithDistance.isEmpty) {
+                      // Apply distance-based sorting with featured priority
+                      final sortedWithDistance = _sortListingsWithDistance(listingsWithDistance);
+                      
+                      if (sortedWithDistance.isEmpty) {
                         return Center(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -510,18 +711,23 @@ class _CategoryListingScreenState extends State<CategoryListingScreen> {
                               ),
                               const SizedBox(height: 16),
                               Text(
-                                "No products nearby",
+                                _selectedDistanceKm != null
+                                    ? "No items found within ${_selectedDistanceKm!.toStringAsFixed(0)} km. Try increasing distance."
+                                    : "No products nearby",
                                 style: TextStyle(
                                   fontSize: 16,
                                   color: Colors.grey.shade600,
                                 ),
+                                textAlign: TextAlign.center,
                               ),
                               const SizedBox(height: 8),
                               TextButton(
                                 onPressed: () {
-                                  setState(() => _useLocationFilter = false);
+                                  setState(() {
+                                    _selectedDistanceKm = null;
+                                  });
                                 },
-                                child: const Text('Show all products'),
+                                child: const Text('Remove distance filter'),
                               ),
                             ],
                           ),
@@ -529,8 +735,8 @@ class _CategoryListingScreenState extends State<CategoryListingScreen> {
                       }
 
                       return _buildListingList(
-                        listingsWithDistance.map((lwd) => lwd.listing).toList(),
-                        listingsWithDistance,
+                        sortedWithDistance.map((lwd) => lwd.listing).toList(),
+                        sortedWithDistance,
                       );
                     },
                   );
