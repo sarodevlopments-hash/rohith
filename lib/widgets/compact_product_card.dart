@@ -2,11 +2,14 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../models/listing.dart';
+import '../models/sell_type.dart';
 import '../screens/product_details_screen.dart';
 import '../theme/app_theme.dart';
 import '../services/image_storage_service.dart';
+import '../services/seller_profile_service.dart';
+import '../services/seller_review_service.dart';
 
-class CompactProductCard extends StatelessWidget {
+class CompactProductCard extends StatefulWidget {
   final Listing listing;
   final String? badgeText; // e.g., "Popular", "Best Seller"
 
@@ -16,24 +19,107 @@ class CompactProductCard extends StatelessWidget {
     this.badgeText,
   });
 
+  @override
+  State<CompactProductCard> createState() => _CompactProductCardState();
+}
+
+class _CompactProductCardState extends State<CompactProductCard> {
+  double? _sellerRating;
+  int _reviewCount = 0;
+  bool _isLoadingRating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSellerRating();
+  }
+
+  Future<void> _loadSellerRating() async {
+    // Only load rating for Cooked Food and Live Kitchen
+    if (widget.listing.type == SellType.cookedFood || 
+        widget.listing.type == SellType.liveKitchen) {
+      setState(() => _isLoadingRating = true);
+      try {
+        // First try to get from profile
+        final profile = await SellerProfileService.getProfile(widget.listing.sellerId);
+        
+        // If profile has rating, use it
+        if (profile != null && profile.averageRating > 0) {
+          if (mounted) {
+            setState(() {
+              _sellerRating = profile.averageRating;
+              _reviewCount = profile.reviewCount;
+              _isLoadingRating = false;
+            });
+          }
+        } else {
+          // If profile doesn't have rating, fetch from reviews
+          final reviews = await SellerReviewService.getSellerReviews(
+            sellerId: widget.listing.sellerId,
+            approvedOnly: true,
+          );
+          
+          if (reviews.isNotEmpty) {
+            final approvedReviews = reviews.where((r) => r.isApproved).toList();
+            final reviewsToUse = approvedReviews.isNotEmpty ? approvedReviews : reviews;
+            final totalRating = reviewsToUse.fold<double>(0.0, (sum, review) => sum + review.rating);
+            final averageRating = (totalRating / reviewsToUse.length);
+            if (mounted) {
+              setState(() {
+                _sellerRating = averageRating;
+                _reviewCount = reviewsToUse.length;
+                _isLoadingRating = false;
+              });
+            }
+          } else {
+            // No reviews yet
+            if (mounted) {
+              setState(() {
+                _sellerRating = 0.0;
+                _reviewCount = 0;
+                _isLoadingRating = false;
+              });
+            }
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isLoadingRating = false);
+        }
+      }
+    }
+  }
+
+  Color _getRatingColor(double rating) {
+    if (rating >= 4.5) return Colors.green;
+    if (rating >= 3.5) return Colors.orange;
+    return Colors.red;
+  }
+
   double _calculateDiscount() {
-    if (listing.originalPrice == null) return 0;
-    return ((listing.originalPrice! - listing.price) / listing.originalPrice!) * 100;
+    if (widget.listing.originalPrice == null) return 0;
+    return ((widget.listing.originalPrice! - widget.listing.price) / widget.listing.originalPrice!) * 100;
+  }
+
+  bool _shouldShowSellerInfo() {
+    return widget.listing.type == SellType.cookedFood || 
+           widget.listing.type == SellType.liveKitchen;
   }
 
   @override
   Widget build(BuildContext context) {
     final discount = _calculateDiscount();
-    final isAvailable = listing.isLiveKitchen
-        ? listing.isLiveKitchenAvailable
-        : listing.quantity > 0;
-    final imagePath = listing.imagePath;
+    final isAvailable = widget.listing.isLiveKitchen
+        ? widget.listing.isLiveKitchenAvailable
+        : widget.listing.quantity > 0;
+    final imagePath = widget.listing.imagePath;
+    final shouldShowSeller = _shouldShowSellerInfo();
 
     return GestureDetector(
       onTap: () {
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (context) => ProductDetailsScreen(listing: listing),
+            builder: (context) => ProductDetailsScreen(listing: widget.listing),
           ),
         );
       },
@@ -94,7 +180,7 @@ class CompactProductCard extends StatelessWidget {
                         ),
                   ),
                   // Badge (Top Left)
-                  if (badgeText != null)
+                  if (widget.badgeText != null)
                     Positioned(
                       top: 8,
                       left: 8,
@@ -105,7 +191,7 @@ class CompactProductCard extends StatelessWidget {
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
-                          badgeText!,
+                          widget.badgeText!,
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 10,
@@ -168,50 +254,116 @@ class CompactProductCard extends StatelessWidget {
 
             // Product Details
             Padding(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   // Product Name
                   Text(
-                    listing.name,
+                    widget.listing.name,
                     style: AppTheme.bodyMedium.copyWith(
                       fontWeight: FontWeight.w600,
+                      fontSize: 12,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 6),
+                  
+                  const SizedBox(height: 4),
 
                   // Price
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: AppTheme.getPriceBadgeDecoration(),
                         child: Text(
-                          '₹${listing.price.toStringAsFixed(0)}',
+                          '₹${widget.listing.price.toStringAsFixed(0)}',
                           style: const TextStyle(
-                            fontSize: 14,
+                            fontSize: 12,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
                           ),
                         ),
                       ),
-                      if (listing.originalPrice != null) ...[
-                        const SizedBox(width: 6),
-                        Text(
-                          '₹${listing.originalPrice!.toStringAsFixed(0)}',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.grey.shade600,
-                            decoration: TextDecoration.lineThrough,
+                      if (widget.listing.originalPrice != null) ...[
+                        const SizedBox(width: 3),
+                        Flexible(
+                          child: Text(
+                            '₹${widget.listing.originalPrice!.toStringAsFixed(0)}',
+                            style: TextStyle(
+                              fontSize: 9,
+                              color: Colors.grey.shade600,
+                              decoration: TextDecoration.lineThrough,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
                     ],
                   ),
+                  
+                  // Seller Name & Rating (Only for Cooked Food & Live Kitchen) - Below Price
+                  if (shouldShowSeller) ...[
+                    const SizedBox(height: 4),
+                    // Restaurant/Seller Name
+                    Text(
+                      widget.listing.sellerName,
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey.shade700,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    // Rating - Compact display
+                    if (_isLoadingRating)
+                      const SizedBox(
+                        height: 10,
+                        width: 10,
+                        child: CircularProgressIndicator(strokeWidth: 1.5),
+                      )
+                    else if (_sellerRating != null)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.star,
+                            size: 10,
+                            color: _sellerRating! > 0 
+                                ? _getRatingColor(_sellerRating!) 
+                                : Colors.grey.shade400,
+                          ),
+                          const SizedBox(width: 2),
+                          Text(
+                            _sellerRating! > 0 
+                                ? _sellerRating!.toStringAsFixed(1)
+                                : '0.0',
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                              color: _sellerRating! > 0 
+                                  ? _getRatingColor(_sellerRating!) 
+                                  : Colors.grey.shade600,
+                            ),
+                          ),
+                          Text(
+                            ' (${_reviewCount})',
+                            style: TextStyle(
+                              fontSize: 8,
+                              color: _reviewCount > 0 
+                                  ? Colors.grey.shade600 
+                                  : Colors.grey.shade400,
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
                 ],
               ),
             ),
