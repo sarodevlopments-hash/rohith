@@ -40,6 +40,12 @@ class SellerProfile extends HiveObject {
   @HiveField(10)
   Map<String, String>? groceryDocuments; // Map of document type -> Firebase Storage URL
 
+  @HiveField(11, defaultValue: 0.0)
+  final double averageRating; // Average seller rating (0.0 to 5.0)
+
+  @HiveField(12, defaultValue: 0)
+  final int reviewCount; // Total number of seller reviews
+
   SellerProfile({
     required this.sellerName,
     required this.fssaiLicense,
@@ -52,6 +58,8 @@ class SellerProfile extends HiveObject {
     this.sellerType,
     this.groceryOnboardingCompleted = false,
     this.groceryDocuments,
+    this.averageRating = 0.0,
+    this.reviewCount = 0,
   });
 
   // Helper getters

@@ -4,7 +4,8 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../models/listing.dart';
 import '../models/order.dart';
-import '../models/rating.dart';
+import '../models/seller_review.dart';
+import '../services/seller_review_service.dart';
 import 'seller_transactions_screen.dart';
 import 'seller_item_insights_screen.dart';
 import 'seller_reviews_screen.dart';
@@ -2418,6 +2419,7 @@ Widget build(BuildContext context) {
           final itemOrders = orders.where((o) => o.listingId == listing.key.toString()).toList();
           final totalSold = itemOrders.fold<int>(0, (sum, o) => sum + o.quantity);
           final revenue = itemOrders.fold<double>(0, (sum, o) => sum + o.pricePaid);
+          final avgRating = listing.averageRating > 0 ? listing.averageRating : 0.0;
 
           return Container(
             margin: const EdgeInsets.only(bottom: 12),
@@ -2453,13 +2455,50 @@ Widget build(BuildContext context) {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        listing.name,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              listing.name,
                               style: TextStyle(
-                          fontSize: 16,
+                                fontSize: 16,
                                 fontWeight: FontWeight.w600,
                                 color: const Color(0xFF1F2937), // Dark gray
-                        ),
+                              ),
+                            ),
+                          ),
+                          // Show Live Kitchen badge if applicable
+                          if (listing.isLiveKitchen) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.shade50,
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: Colors.orange.shade200),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.restaurant,
+                                    size: 12,
+                                    color: Colors.orange.shade700,
+                                  ),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    'Live',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.orange.shade700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                             const SizedBox(height: 8),
                             Row(
@@ -2495,6 +2534,23 @@ Widget build(BuildContext context) {
                                     color: const Color(0xFF1F2937),
                         ),
                       ),
+                      if (avgRating > 0) ...[
+                        const SizedBox(width: 16),
+                        Icon(
+                          Icons.star,
+                          size: 14,
+                          color: Colors.amber,
+                        ),
+                        const SizedBox(width: 2),
+                        Text(
+                          avgRating.toStringAsFixed(1),
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF1F2937),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                           ],
@@ -2555,16 +2611,63 @@ Widget build(BuildContext context) {
           ],
         ),
         const SizedBox(height: 16),
-        ValueListenableBuilder(
-          valueListenable: Hive.box('ratingsBox').listenable(),
-          builder: (context, Box box, _) {
-            final ratings = box.values
-                .where((r) => r is Rating && r.sellerId == widget.sellerId)
-                .cast<Rating>()
-                .toList()
-              ..sort((a, b) => b.ratedAt.compareTo(a.ratedAt));
+        FutureBuilder<List<SellerReview>>(
+          future: SellerReviewService.getSellerReviews(
+            sellerId: widget.sellerId,
+            limit: 3,
+            approvedOnly: true,
+          ),
+          builder: (context, snapshot) {
+            print('[SellerDashboard] Builder called - ConnectionState: ${snapshot.connectionState}, HasError: ${snapshot.hasError}, HasData: ${snapshot.hasData}');
+            
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              print('[SellerDashboard] ⏳ Showing loading indicator');
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(24),
+                  child: CircularProgressIndicator(),
+                ),
+              );
+            }
 
-            if (ratings.isEmpty) {
+            if (snapshot.hasError) {
+              print('[SellerDashboard] ❌ Error loading reviews: ${snapshot.error}');
+              print('[SellerDashboard] Error details: ${snapshot.error.toString()}');
+              return Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Error loading reviews',
+                      style: TextStyle(color: Colors.red.shade700, fontSize: 14, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${snapshot.error}',
+                      style: TextStyle(color: Colors.red.shade600, fontSize: 12),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'SellerId: ${widget.sellerId}',
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 10),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            final reviews = snapshot.data ?? [];
+            print('[SellerDashboard] ✅ Loaded ${reviews.length} reviews for seller ${widget.sellerId}');
+            if (reviews.isNotEmpty) {
+              print('[SellerDashboard] First review: sellerId=${reviews.first.sellerId}, rating=${reviews.first.rating}');
+            }
+
+            if (reviews.isEmpty) {
               return Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
@@ -2596,7 +2699,7 @@ Widget build(BuildContext context) {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                    'No reviews yet',
+                      'No reviews yet',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -2619,7 +2722,7 @@ Widget build(BuildContext context) {
             }
 
             return Column(
-              children: ratings.take(3).map((rating) {
+              children: reviews.map((review) {
                 return Container(
                   margin: const EdgeInsets.only(bottom: 12),
                   padding: const EdgeInsets.all(16),
@@ -2631,7 +2734,7 @@ Widget build(BuildContext context) {
                     children: [
                       ...List.generate(5, (index) {
                         return Icon(
-                          index < rating.sellerRating
+                          index < review.rating.round()
                               ? Icons.star
                               : Icons.star_border,
                           size: 16,
@@ -2641,7 +2744,7 @@ Widget build(BuildContext context) {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          rating.review ?? 'No review',
+                          review.reviewText ?? 'No review',
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.grey.shade700,

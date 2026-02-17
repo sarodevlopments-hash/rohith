@@ -16,21 +16,21 @@ class ScheduledListingAdapter extends TypeAdapter<ScheduledListing> {
     final fields = <int, dynamic>{
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
-    return ScheduledListing.fromHive(
+    return ScheduledListing(
       scheduledId: fields[0] as String,
       listingData: fields[1] as Listing,
       scheduleType: fields[2] as ScheduleType,
       scheduleStartDate: fields[3] as DateTime,
       scheduleEndDate: fields[4] as DateTime?,
-      scheduleTimeHour: fields[5] as int,
-      scheduleTimeMinute: fields[6] as int,
-      scheduleCloseTimeHour: fields[7] as int?,
-      scheduleCloseTimeMinute: fields[8] as int?,
       dayOfWeek: fields[9] as int?,
       sellerId: fields[10] as String,
       lastPostedAt: fields[11] as DateTime?,
       isActive: fields[12] as bool,
       createdAt: fields[13] as DateTime,
+      scheduleTimeHour: fields[5] as int?,
+      scheduleTimeMinute: fields[6] as int?,
+      scheduleCloseTimeHour: fields[7] as int?,
+      scheduleCloseTimeMinute: fields[8] as int?,
     );
   }
 

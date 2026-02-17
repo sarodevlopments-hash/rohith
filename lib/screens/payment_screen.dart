@@ -125,17 +125,39 @@ class _PaymentScreenState extends State<PaymentScreen> {
           ? 'OrderReceived'  // Live Kitchen orders start as "Order Received"
           : 'AwaitingSellerConfirmation';  // Regular orders await seller confirmation
       
+      // Ensure all price values are valid doubles (not null)
+      final totalPrice = (widget.totalPrice.isNaN || widget.totalPrice.isInfinite || widget.totalPrice < 0) 
+          ? 0.0 
+          : widget.totalPrice;
+      final savedAmount = (widget.savedAmount.isNaN || widget.savedAmount.isInfinite || widget.savedAmount < 0) 
+          ? 0.0 
+          : widget.savedAmount;
+      
+      // Safely get listing prices with null checks
+      final listingPrice = widget.listing.price;
+      final listingOriginalPrice = widget.listing.originalPrice;
+      final originalPrice = (listingOriginalPrice ?? listingPrice);
+      final discountedPrice = listingPrice;
+      
+      // Validate all values are valid numbers
+      if (totalPrice.isNaN || totalPrice.isInfinite || 
+          savedAmount.isNaN || savedAmount.isInfinite ||
+          originalPrice.isNaN || originalPrice.isInfinite ||
+          discountedPrice.isNaN || discountedPrice.isInfinite) {
+        throw Exception('Invalid price values detected. Please try again.');
+      }
+      
       // Create order
       final order = Order(
         foodName: widget.listing.name,
         sellerName: widget.listing.sellerName,
-        pricePaid: widget.totalPrice,
-        savedAmount: widget.savedAmount,
+        pricePaid: totalPrice,
+        savedAmount: savedAmount,
         purchasedAt: DateTime.now(),
         listingId: widget.listing.key.toString(),
         quantity: widget.quantity,
-        originalPrice: widget.listing.originalPrice ?? widget.listing.price,
-        discountedPrice: widget.listing.price,
+        originalPrice: originalPrice,
+        discountedPrice: discountedPrice,
         userId: currentUser.uid,
         sellerId: widget.listing.sellerId,
         orderStatus: orderStatus,

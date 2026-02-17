@@ -136,8 +136,12 @@ class AcceptedOrderNotificationService {
         return false;
       }
       
+      // For Live Kitchen orders, use status-specific notification key; for regular orders, use order-specific key
+      final notificationKey = isLiveKitchen
+          ? 'accepted_${order.orderId}_${order.orderStatus}'
+          : 'accepted_${order.orderId}';
+      
       // Check if already dismissed or persisted as shown - STRICT check
-      final notificationKey = 'accepted_${order.orderId}';
       if (_dismissedNotifications.contains(notificationKey) ||
           _shownNotifications.contains(notificationKey) ||
           (shownBox?.get(notificationKey) == true)) {
@@ -145,7 +149,7 @@ class AcceptedOrderNotificationService {
         return false;
       }
       
-      // For Live Kitchen orders, check if status has changed (allow re-showing for status changes)
+      // For Live Kitchen orders, check if status is important
       if (isLiveKitchen) {
         final lastStatus = _lastShownStatus[order.orderId];
         // Important statuses that should trigger notifications
@@ -153,12 +157,7 @@ class AcceptedOrderNotificationService {
         
         // Only show for important statuses
         if (!importantStatuses.contains(order.orderStatus)) {
-          return false;
-        }
-        
-        // If we've shown a notification for this exact status before, skip
-        if (lastStatus == order.orderStatus) {
-          debugPrint('[AcceptedOrderNotification] Live Kitchen order ${order.orderId} already shown for status ${order.orderStatus}, skipping');
+          debugPrint('[AcceptedOrderNotification] Live Kitchen order ${order.orderId} status ${order.orderStatus} is not in important statuses, skipping');
           return false;
         }
         
@@ -166,13 +165,6 @@ class AcceptedOrderNotificationService {
         // 1. First time seeing this status, OR
         // 2. Status has changed to a more important status (e.g., Preparing -> ReadyForPickup)
         debugPrint('[AcceptedOrderNotification] Live Kitchen order ${order.orderId} status: ${order.orderStatus}, last shown: $lastStatus - will show notification');
-      } else {
-        // For regular orders, only show once (even across app restarts)
-        if (_shownNotifications.contains(notificationKey) ||
-            (shownBox?.get(notificationKey) == true)) {
-          debugPrint('[AcceptedOrderNotification] Order ${order.orderId} was already shown (persisted), skipping');
-          return false;
-        }
       }
       
       // All checks passed - this order is genuinely accepted
@@ -196,7 +188,11 @@ class AcceptedOrderNotificationService {
       return;
     }
 
-    final notificationKey = 'accepted_${order.orderId}';
+    // For Live Kitchen orders, use status-specific notification key; for regular orders, use order-specific key
+    final isLiveKitchen = order.isLiveKitchenOrder ?? false;
+    final notificationKey = isLiveKitchen
+        ? 'accepted_${order.orderId}_${order.orderStatus}'
+        : 'accepted_${order.orderId}';
 
     // Guard against async races: multiple triggers can call _showNotification while we're
     // awaiting Firestore. This prevents inserting multiple overlays for the same order.
@@ -217,8 +213,7 @@ class AcceptedOrderNotificationService {
       return;
     }
 
-    // Check if this is a Live Kitchen order (needed for Firestore validation)
-    final isLiveKitchen = order.isLiveKitchenOrder ?? false;
+    // isLiveKitchen already defined above
 
     // Get seller details from Firestore and verify status
     String? sellerPhone;
@@ -326,6 +321,7 @@ class AcceptedOrderNotificationService {
     }
 
     // Mark as shown IMMEDIATELY before showing to prevent duplicates
+    // notificationKey is already status-specific for Live Kitchen orders
     _shownNotifications.add(notificationKey);
     if (Hive.isBoxOpen('acceptedOrderNotificationsBox')) {
       Hive.box('acceptedOrderNotificationsBox').put(notificationKey, true);

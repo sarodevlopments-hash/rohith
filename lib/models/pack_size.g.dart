@@ -20,7 +20,7 @@ class PackSizeAdapter extends TypeAdapter<PackSize> {
       quantity: fields[0] as double,
       price: fields[1] as double,
       label: fields[2] as String?,
-      stock: fields[3] as int? ?? 0, // Default to 0 if null (for backward compatibility)
+      stock: fields[3] as int,
     );
   }
 

@@ -1,12 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:hive_flutter/hive_flutter.dart';
-import '../models/rating.dart';
+import 'package:cloud_firestore/cloud_firestore.dart' hide Order;
+import '../models/seller_review.dart';
+import '../services/seller_review_service.dart';
+import 'package:intl/intl.dart';
 
-class SellerReviewsScreen extends StatelessWidget {
+class SellerReviewsScreen extends StatefulWidget {
   final String sellerId;
 
   const SellerReviewsScreen({super.key, required this.sellerId});
 
+  @override
+  State<SellerReviewsScreen> createState() => _SellerReviewsScreenState();
+}
+
+class _SellerReviewsScreenState extends State<SellerReviewsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -21,36 +28,102 @@ class SellerReviewsScreen extends StatelessWidget {
             color: Colors.black87,
           ),
         ),
+        iconTheme: const IconThemeData(color: Colors.black87),
       ),
-      body: ValueListenableBuilder(
-        valueListenable: Hive.box('ratingsBox').listenable(),
-        builder: (context, Box box, _) {
-          final ratings = box.values
-              .where((r) => r is Rating && r.sellerId == sellerId)
-              .cast<Rating>()
-              .toList()
-            ..sort((a, b) => b.ratedAt.compareTo(a.ratedAt));
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: SellerReviewService.getSellerReviewsStream(
+          sellerId: widget.sellerId,
+          approvedOnly: true,
+        ),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-          if (ratings.isEmpty) {
+          if (snapshot.hasError) {
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.star_border, size: 80, color: Colors.grey.shade400),
+                  Icon(Icons.error_outline, size: 64, color: Colors.red.shade300),
                   const SizedBox(height: 16),
                   Text(
-                    'No reviews yet',
+                    'Error loading reviews',
                     style: TextStyle(color: Colors.grey.shade600),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    snapshot.error.toString(),
+                    style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                    textAlign: TextAlign.center,
                   ),
                 ],
               ),
             );
           }
 
-          final avgSellerRating = ratings
-                  .map((r) => r.sellerRating)
+          var reviews = (snapshot.data?.docs ?? [])
+              .map((doc) {
+                final data = doc.data();
+                data['id'] = doc.id; // Ensure ID is set
+                return SellerReview.fromFirestore(data);
+              })
+              .toList();
+
+          // Filter by approved status
+          reviews = reviews.where((r) => r.isApproved).toList();
+          
+          // Sort by createdAt
+          reviews.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          
+          // Limit to requested amount
+          reviews = reviews.take(50).toList();
+
+          if (reviews.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFB703).withOpacity(0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.star_border,
+                      size: 40,
+                      color: const Color(0xFFFFB703),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    'No reviews yet',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Customer reviews will appear here once buyers rate your products.',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey.shade600,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            );
+          }
+
+          final avgRating = reviews
+                  .map((r) => r.rating)
                   .reduce((a, b) => a + b) /
-              ratings.length;
+              reviews.length;
 
           return Column(
             children: [
@@ -82,7 +155,7 @@ class SellerReviewsScreen extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          avgSellerRating.toStringAsFixed(1),
+                          avgRating.toStringAsFixed(1),
                           style: const TextStyle(
                             fontSize: 48,
                             fontWeight: FontWeight.bold,
@@ -96,7 +169,7 @@ class SellerReviewsScreen extends StatelessWidget {
                             Row(
                               children: List.generate(5, (i) {
                                 return Icon(
-                                  i < avgSellerRating.round()
+                                  i < avgRating.round()
                                       ? Icons.star
                                       : Icons.star_border,
                                   size: 24,
@@ -105,7 +178,7 @@ class SellerReviewsScreen extends StatelessWidget {
                               }),
                             ),
                             Text(
-                              '${ratings.length} reviews',
+                              '${reviews.length} review${reviews.length != 1 ? 's' : ''}',
                               style: TextStyle(
                                 fontSize: 12,
                                 color: Colors.grey.shade600,
@@ -123,9 +196,9 @@ class SellerReviewsScreen extends StatelessWidget {
               Expanded(
                 child: ListView.builder(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: ratings.length,
+                  itemCount: reviews.length,
                   itemBuilder: (context, index) {
-                    final rating = ratings[index];
+                    final review = reviews[index];
                     return Container(
                       margin: const EdgeInsets.only(bottom: 12),
                       padding: const EdgeInsets.all(16),
@@ -146,7 +219,7 @@ class SellerReviewsScreen extends StatelessWidget {
                             children: [
                               ...List.generate(5, (i) {
                                 return Icon(
-                                  i < rating.sellerRating
+                                  i < review.rating.round()
                                       ? Icons.star
                                       : Icons.star_border,
                                   size: 20,
@@ -155,7 +228,7 @@ class SellerReviewsScreen extends StatelessWidget {
                               }),
                               const Spacer(),
                               Text(
-                                '${rating.ratedAt.day}/${rating.ratedAt.month}/${rating.ratedAt.year}',
+                                DateFormat('dd/MM/yyyy').format(review.createdAt),
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: Colors.grey.shade600,
@@ -163,14 +236,35 @@ class SellerReviewsScreen extends StatelessWidget {
                               ),
                             ],
                           ),
-                          if (rating.review != null && rating.review!.isNotEmpty) ...[
+                          if (review.reviewText != null && review.reviewText!.isNotEmpty) ...[
                             const SizedBox(height: 8),
                             Text(
-                              rating.review!,
+                              review.reviewText!,
                               style: TextStyle(
                                 fontSize: 14,
                                 color: Colors.grey.shade800,
                               ),
+                            ),
+                          ],
+                          // Show category ratings if available
+                          if (review.serviceRating != null ||
+                              review.deliveryRating != null ||
+                              review.packagingRating != null ||
+                              review.behaviorRating != null) ...[
+                            const SizedBox(height: 12),
+                            Wrap(
+                              spacing: 12,
+                              runSpacing: 8,
+                              children: [
+                                if (review.serviceRating != null)
+                                  _buildCategoryRating('Service', review.serviceRating!),
+                                if (review.deliveryRating != null)
+                                  _buildCategoryRating('Delivery', review.deliveryRating!),
+                                if (review.packagingRating != null)
+                                  _buildCategoryRating('Packaging', review.packagingRating!),
+                                if (review.behaviorRating != null)
+                                  _buildCategoryRating('Behavior', review.behaviorRating!),
+                              ],
                             ),
                           ],
                         ],
@@ -185,5 +279,37 @@ class SellerReviewsScreen extends StatelessWidget {
       ),
     );
   }
-}
 
+  Widget _buildCategoryRating(String label, double rating) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.grey.shade700,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(width: 4),
+          ...List.generate(5, (i) {
+            return Icon(
+              i < rating.round()
+                  ? Icons.star
+                  : Icons.star_border,
+              size: 12,
+              color: Colors.amber,
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
