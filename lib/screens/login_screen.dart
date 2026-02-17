@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/user_service.dart';
+import '../services/user_firestore_service.dart';
 import 'registration_screen.dart';
 import '../theme/app_theme.dart';
 
@@ -69,23 +70,53 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() {
         _isLoading = false;
       });
-      String errorMessage = 'Login failed. Please try again.';
       
-      if (e.code == 'user-not-found') {
-        errorMessage = 'No account found with this email. Please register first.';
+      // Handle "user-not-found" or "invalid-credential" errors - check Firestore before showing error
+      if (e.code == 'user-not-found' || e.code == 'invalid-credential') {
+        print('🔍 Authentication failed (${e.code}) - checking Firestore for user...');
+        
+        // Check if user exists in Firestore by email
+        final email = _emailController.text.trim();
+        final userExistsInFirestore = await UserFirestoreService.checkUserExistsByEmail(email);
+        
+        if (!userExistsInFirestore) {
+          // User doesn't exist in Firestore either → navigate to registration
+          print('✅ User not found in Firestore - navigating to RegistrationScreen');
+          if (mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (_) => RegistrationScreen(
+                  email: email,
+                  firebaseUser: null,
+                  isNewUser: true,
+                ),
+              ),
+            );
+          }
+          return; // Don't show error, just navigate
+        } else {
+          // User exists in Firestore but authentication failed → wrong password or account issue
+          if (e.code == 'invalid-credential') {
+            _showError('Incorrect password. Please try again.');
+          } else {
+            _showError('Account found but authentication failed. Please contact support.');
+          }
+          print('⚠️ User exists in Firestore but authentication failed');
+        }
       } else if (e.code == 'wrong-password') {
-        errorMessage = 'Incorrect password. Please try again.';
+        _showError('Incorrect password. Please try again.');
       } else if (e.code == 'invalid-email') {
-        errorMessage = 'Invalid email address. Please check and try again.';
+        _showError('Invalid email address. Please check and try again.');
       } else if (e.code == 'user-disabled') {
-        errorMessage = 'This account has been disabled.';
+        _showError('This account has been disabled.');
       } else if (e.code == 'too-many-requests') {
-        errorMessage = 'Too many failed attempts. Please try again later.';
-      } else if (e.message != null) {
-        errorMessage = e.message!;
+        _showError('Too many failed attempts. Please try again later.');
+      } else {
+        String errorMessage = e.message ?? 'Login failed. Please try again.';
+        _showError(errorMessage);
       }
       
-      _showError(errorMessage);
       print('Firebase Auth Error: ${e.code} - ${e.message}');
     } catch (e) {
       setState(() {

@@ -105,7 +105,34 @@ class UserFirestoreService {
     }
   }
 
-  /// Get user profile from Firestore
+  /// Check if user exists in Firestore by email (for login flow)
+  /// Returns true if user document exists with this email, false otherwise
+  static Future<bool> checkUserExistsByEmail(String email) async {
+    try {
+      print('🔍 Checking if user exists in Firestore by email: $email');
+      
+      // Query Firestore for user with this email
+      final querySnapshot = await _db
+          .collection(_collection)
+          .where('email', isEqualTo: email.toLowerCase().trim())
+          .limit(1)
+          .get()
+          .timeout(const Duration(seconds: 5));
+      
+      if (querySnapshot.docs.isNotEmpty) {
+        print('✅ User found in Firestore with email: $email');
+        return true;
+      }
+      
+      print('ℹ️ User not found in Firestore with email: $email');
+      return false;
+    } catch (e) {
+      print('❌ Error checking user by email: $e');
+      // On permission errors or other errors, assume user doesn't exist
+      return false;
+    }
+  }
+
   static Future<AppUser?> getUser(String userId) async {
     try {
       // Check authentication first

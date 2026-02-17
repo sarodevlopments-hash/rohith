@@ -12,6 +12,8 @@ import '../screens/product_details_screen.dart';
 import '../theme/app_theme.dart';
 import '../services/image_storage_service.dart';
 import '../services/distance_filter_service.dart';
+import '../services/seller_profile_service.dart';
+import '../services/seller_review_service.dart';
 
 class BuyerListingCard extends StatefulWidget {
   final Listing listing;
@@ -29,11 +31,15 @@ class BuyerListingCard extends StatefulWidget {
 
 class _BuyerListingCardState extends State<BuyerListingCard> {
   double? averageFoodRating;
+  double? _sellerRating;
+  int _reviewCount = 0;
+  bool _isLoadingRating = false;
 
   @override
   void initState() {
     super.initState();
     _loadRatings();
+    _loadSellerRating();
   }
 
   Future<void> _loadRatings() async {
@@ -50,6 +56,71 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
         averageFoodRating = foodRatings.reduce((a, b) => a + b) / foodRatings.length;
       });
     }
+  }
+
+  Future<void> _loadSellerRating() async {
+    // Only load rating for Cooked Food and Live Kitchen
+    if (widget.listing.type == SellType.cookedFood || 
+        widget.listing.type == SellType.liveKitchen) {
+      setState(() => _isLoadingRating = true);
+      try {
+        // First try to get from profile
+        final profile = await SellerProfileService.getProfile(widget.listing.sellerId);
+        
+        // If profile has rating, use it
+        if (profile != null && profile.averageRating > 0) {
+          if (mounted) {
+            setState(() {
+              _sellerRating = profile.averageRating;
+              _reviewCount = profile.reviewCount;
+              _isLoadingRating = false;
+            });
+          }
+        } else {
+          // If profile doesn't have rating, fetch from reviews
+          final reviews = await SellerReviewService.getSellerReviews(
+            sellerId: widget.listing.sellerId,
+            approvedOnly: true,
+          );
+          
+          if (reviews.isNotEmpty) {
+            final totalRating = reviews.fold<double>(0.0, (sum, review) => sum + review.rating);
+            final averageRating = (totalRating / reviews.length);
+            if (mounted) {
+              setState(() {
+                _sellerRating = averageRating;
+                _reviewCount = reviews.length;
+                _isLoadingRating = false;
+              });
+            }
+          } else {
+            // No reviews yet
+            if (mounted) {
+              setState(() {
+                _sellerRating = 0.0;
+                _reviewCount = 0;
+                _isLoadingRating = false;
+              });
+            }
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isLoadingRating = false);
+        }
+      }
+    }
+  }
+
+  bool _shouldShowSellerInfo() {
+    return widget.listing.type == SellType.cookedFood || 
+           widget.listing.type == SellType.liveKitchen;
+  }
+
+  Color _getRatingColor(double rating) {
+    if (rating >= 4.5) return Colors.green;
+    if (rating >= 3.5) return Colors.orange;
+    return Colors.red;
   }
 
   Color _getFoodTypeColor() {
@@ -352,6 +423,67 @@ class _BuyerListingCardState extends State<BuyerListingCard> {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
+                
+                // Seller Name & Rating (Only for Cooked Food & Live Kitchen)
+                if (_shouldShowSellerInfo()) ...[
+                  const SizedBox(height: 4),
+                  // Restaurant/Seller Name
+                  Text(
+                    widget.listing.sellerName,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.grey.shade700,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 3),
+                  // Rating
+                  if (_isLoadingRating)
+                    const SizedBox(
+                      height: 13,
+                      width: 13,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  else if (_sellerRating != null)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.star,
+                          size: 13,
+                          color: _sellerRating! > 0 
+                              ? _getRatingColor(_sellerRating!) 
+                              : Colors.grey.shade400,
+                        ),
+                        const SizedBox(width: 3),
+                        Text(
+                          _sellerRating! > 0 
+                              ? _sellerRating!.toStringAsFixed(1)
+                              : '0.0',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: _sellerRating! > 0 
+                                ? _getRatingColor(_sellerRating!) 
+                                : Colors.grey.shade600,
+                          ),
+                        ),
+                        if (_reviewCount > 0) ...[
+                          const SizedBox(width: 3),
+                          Text(
+                            '(${_reviewCount})',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                ],
+                
                 const SizedBox(height: 8),
 
                 // Price Section

@@ -85,6 +85,8 @@ class SellerProfileService {
         sellerType: data['sellerType'] as String?,
         groceryOnboardingCompleted: data['groceryOnboardingCompleted'] as bool? ?? false,
         groceryDocuments: (data['groceryDocuments'] as Map<dynamic, dynamic>?)?.cast<String, String>(),
+        averageRating: (data['averageRating'] as num?)?.toDouble() ?? 0.0,
+        reviewCount: (data['reviewCount'] as int?) ?? 0,
       );
     } catch (e) {
       print('❌ Error converting Firestore data to SellerProfile: $e');
