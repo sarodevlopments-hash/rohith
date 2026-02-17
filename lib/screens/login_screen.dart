@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/user_service.dart';
 import 'registration_screen.dart';
-import 'main_tab_screen.dart';
 import '../theme/app_theme.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -49,50 +48,23 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      // Check if user is registered
-      final userService = UserService();
-      final appUser = await userService.getUser(user.uid);
-
-      if (appUser == null || !appUser.isRegistered) {
-        // First-time user - navigate to registration
-        if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (_) => RegistrationScreen(
-                email: _emailController.text.trim(),
-                firebaseUser: user,
-              ),
-            ),
-          );
-        }
-      } else {
-        // Existing user - check if registered
-        final appUser = await userService.getUser(user.uid);
+      // ✅ User authenticated successfully
+      // AuthGate will automatically detect the auth state change via StreamBuilder
+      // and handle navigation based on Firestore document existence
+      print('✅ Login successful - AuthGate will handle navigation');
+      
+      // Update last login time (non-blocking, in background)
+      try {
+        final userService = UserService();
         await userService.updateLastLogin(user.uid);
-        
-        if (mounted) {
-          if (appUser != null && appUser.isRegistered) {
-            // User is registered, go to main screen
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (_) => const MainTabScreen()),
-            );
-          } else {
-            // User exists but not registered, complete registration
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (_) => RegistrationScreen(
-                  email: user.email ?? '',
-                  firebaseUser: user,
-                  isNewUser: false,
-                ),
-              ),
-            );
-          }
-        }
+      } catch (e) {
+        print('⚠️ Failed to update last login: $e');
+        // Continue anyway - not critical
       }
+      
+      // Don't navigate here - let AuthGate handle it
+      // The StreamBuilder in AuthGate will detect the auth state change
+      // and check Firestore document existence to determine where to navigate
     } on FirebaseAuthException catch (e) {
       setState(() {
         _isLoading = false;
@@ -350,6 +322,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     TextButton(
                       onPressed: () {
+                        // Navigate to registration screen for new user signup
                         Navigator.push(
                           context,
                           MaterialPageRoute(

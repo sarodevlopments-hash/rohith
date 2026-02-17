@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/app_user.dart';
 import '../services/user_service.dart';
+import '../services/user_firestore_service.dart';
 import 'main_tab_screen.dart';
 import '../theme/app_theme.dart';
 
@@ -109,7 +110,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       // Save user profile (to both Hive and Firestore)
       print('🔄 Saving user to Hive: ${appUser.uid} (isRegistered: ${appUser.isRegistered})');
       await userService.saveUser(appUser);
-      print('✅ User registration saved: ${appUser.uid} (isRegistered: ${appUser.isRegistered})');
+      print('✅ User registration saved to Hive: ${appUser.uid} (isRegistered: ${appUser.isRegistered})');
 
       // Verify the user was saved correctly
       final verifyUser = await userService.getUser(firebaseUser.uid);
@@ -143,8 +144,17 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         // Continue anyway - not critical
       }
 
-      // Wait a moment to ensure data is saved and synced
-      await Future.delayed(const Duration(milliseconds: 500));
+      // ✅ IMPORTANT: Ensure Firestore document is created before navigation
+      // This ensures AuthGate will find the document on next app launch
+      print('🔄 Syncing user to Firestore (blocking)...');
+      try {
+        await UserFirestoreService.upsertUser(appUser);
+        print('✅ User synced to Firestore successfully');
+      } catch (e) {
+        print('⚠️ Firestore sync failed: $e');
+        print('   User saved locally, will sync in background');
+        // Continue anyway - user is saved locally and will sync later
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
