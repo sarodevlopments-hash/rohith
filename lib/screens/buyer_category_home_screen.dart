@@ -29,6 +29,8 @@ class _BuyerCategoryHomeScreenState extends State<BuyerCategoryHomeScreen> {
   List<Listing> _recentlyViewedListings = [];
   List<Listing> _recommendedListings = [];
   List<Listing> _locationBasedListings = [];
+  List<ListingWithDistance> _recommendedListingsWithDistance = [];
+  List<ListingWithDistance> _locationBasedListingsWithDistance = [];
   List<Listing> _timeBasedListings = [];
   String? _userLocation;
   Timer? _timeBasedRefreshTimer;
@@ -213,14 +215,17 @@ class _BuyerCategoryHomeScreenState extends State<BuyerCategoryHomeScreen> {
       );
 
       // Take only the filtered listings within distance limit
-      final filteredListings = filteredWithDistance
-          .map((lwd) => lwd.listing)
+      final filteredListingsWithDistance = filteredWithDistance
           .take(HomeFeaturesConfig.recommendationsLimit)
+          .toList();
+      final filteredListings = filteredListingsWithDistance
+          .map((lwd) => lwd.listing)
           .toList();
 
       if (mounted) {
         setState(() {
           _recommendedListings = filteredListings;
+          _recommendedListingsWithDistance = filteredListingsWithDistance;
         });
       }
     } catch (e) {
@@ -264,14 +269,17 @@ class _BuyerCategoryHomeScreenState extends State<BuyerCategoryHomeScreen> {
     );
 
     // Take only the filtered listings within distance limit
-    final filteredListings = filteredWithDistance
-        .map((lwd) => lwd.listing)
+    final filteredListingsWithDistance = filteredWithDistance
         .take(HomeFeaturesConfig.locationBasedLimit)
+        .toList();
+    final filteredListings = filteredListingsWithDistance
+        .map((lwd) => lwd.listing)
         .toList();
 
     if (mounted) {
       setState(() {
         _locationBasedListings = filteredListings;
+        _locationBasedListingsWithDistance = filteredListingsWithDistance;
       });
     }
   }
@@ -562,9 +570,16 @@ class _BuyerCategoryHomeScreenState extends State<BuyerCategoryHomeScreen> {
                           scrollDirection: Axis.horizontal,
                           itemCount: filteredRecommended.length,
                           itemBuilder: (context, index) {
+                            final listing = filteredRecommended[index];
+                            final listingWithDistance = _recommendedListingsWithDistance
+                                .firstWhere(
+                                  (lwd) => lwd.listing.key == listing.key,
+                                  orElse: () => ListingWithDistance(listing: listing),
+                                );
                             return CompactProductCard(
-                              listing: filteredRecommended[index],
+                              listing: listing,
                               badgeText: 'Recommended',
+                              listingWithDistance: listingWithDistance,
                             );
                           },
                         ),
@@ -612,9 +627,16 @@ class _BuyerCategoryHomeScreenState extends State<BuyerCategoryHomeScreen> {
                           scrollDirection: Axis.horizontal,
                           itemCount: filteredLocationBased.length,
                           itemBuilder: (context, index) {
+                            final listing = filteredLocationBased[index];
+                            final listingWithDistance = _locationBasedListingsWithDistance
+                                .firstWhere(
+                                  (lwd) => lwd.listing.key == listing.key,
+                                  orElse: () => ListingWithDistance(listing: listing),
+                                );
                             return CompactProductCard(
-                              listing: filteredLocationBased[index],
+                              listing: listing,
                               badgeText: 'Trending',
+                              listingWithDistance: listingWithDistance,
                             );
                           },
                         ),
