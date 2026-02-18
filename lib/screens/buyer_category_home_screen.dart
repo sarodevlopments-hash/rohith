@@ -403,184 +403,200 @@ class _BuyerCategoryHomeScreenState extends State<BuyerCategoryHomeScreen> {
                   ),
                 ),
 
-              // Shop by Category Section - Minimal Clean Header
+              // Shop by Category Section - Fixed Title with Horizontal Scrollable Grid
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      // Custom engaging icon - Shopping basket with category hints
-                      Container(
-                        width: 64,
-                        height: 64,
-                        decoration: BoxDecoration(
-                          // Hero-badge treatment (CTA cue)
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              const Color(0xFF7CB9FF).withOpacity(0.25), // soft blue
-                              const Color(0xFF7FE3B1).withOpacity(0.25), // soft green
-                            ],
-                          ),
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.08),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(16),
-                          child: Image.asset(
-                            'assets/images/categories/shop_by_category_header.png',
-                            // Fill the available area (no extra padding / no downscaling)
-                            fit: BoxFit.cover,
-                            alignment: const Alignment(0, -0.15),
-                            filterQuality: FilterQuality.high,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'Shop by Category',
-                              style: AppTheme.heading3.copyWith(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 17,
-                                letterSpacing: -0.3,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Browse products by category',
-                              style: AppTheme.bodySmall.copyWith(
-                                color: AppTheme.lightText,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w400,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  // Subtle divider
-                  const SizedBox(height: 12),
-                  Divider(
-                    height: 1,
-                    thickness: 1,
-                    color: Colors.grey.shade200,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-
-              // Category Grid
-              GridView.count(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 2,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-                childAspectRatio: 1.0,
-                children: [
-                  _buildCategoryCard(
-                    context: context,
-                    sellType: SellType.cookedFood,
-                    title: 'Food',
-                    icon: Icons.restaurant,
-                    emoji: '🍲',
-                    imagePath: 'assets/images/categories/food.jpg',
-                    color: Colors.orange,
-                  ),
-                  _buildCategoryCard(
-                    context: context,
-                    sellType: SellType.groceries,
-                    title: 'Groceries',
-                    icon: Icons.shopping_basket,
-                    emoji: '🛒',
-                    imagePath: 'assets/images/categories/groceries.jpg',
-                    color: Colors.blue,
-                  ),
-                  _buildCategoryCard(
-                    context: context,
-                    sellType: SellType.vegetables,
-                    title: 'Vegetables & Fruits',
-                    icon: Icons.eco,
-                    emoji: '🥬',
-                    imagePath: 'assets/images/categories/vegetables_fruits.jpg',
-                    color: Colors.green,
-                  ),
-                  _buildCategoryCard(
-                    context: context,
-                    sellType: SellType.clothingAndApparel,
-                    title: 'Clothing',
-                    icon: Icons.checkroom,
-                    emoji: '👕',
-                    imagePath: 'assets/images/categories/clothing.jpg',
-                    color: Colors.purple,
-                  ),
-                  if ((categoryCounts[SellType.liveKitchen] ?? 0) > 0)
-                    _buildCategoryCard(
-                      context: context,
-                      sellType: SellType.liveKitchen,
-                      title: 'Live Kitchen',
-                      icon: Icons.local_dining,
-                      emoji: '🔥',
-                      imagePath: 'assets/images/categories/live kitchen.png',
-                      color: Colors.red,
+                  // Fixed Section Title
+                  Text(
+                    'Shop by Category',
+                    style: AppTheme.heading3.copyWith(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 17,
+                      letterSpacing: -0.3,
                     ),
-                  _buildCategoryCard(
-                    context: context,
-                    sellType: SellType.electronics,
-                    title: 'Electronics',
-                    icon: Icons.devices,
-                    emoji: '📱',
-                    imagePath: null,
-                    color: const Color(0xFF9B59B6),
                   ),
-                  _buildCategoryCard(
-                    context: context,
-                    sellType: SellType.electricals,
-                    title: 'Electricals',
-                    icon: Icons.electrical_services,
-                    emoji: '⚡',
-                    imagePath: null,
-                    color: const Color(0xFFE67E22),
-                  ),
-                  _buildCategoryCard(
-                    context: context,
-                    sellType: SellType.hardware,
-                    title: 'Hardware',
-                    icon: Icons.build,
-                    emoji: '🔧',
-                    imagePath: null,
-                    color: const Color(0xFF34495E),
-                  ),
-                  _buildCategoryCard(
-                    context: context,
-                    sellType: SellType.automobiles,
-                    title: 'Automobiles',
-                    icon: Icons.directions_car,
-                    emoji: '🚗',
-                    imagePath: null,
-                    color: const Color(0xFFE74C3C),
-                  ),
-                  _buildCategoryCard(
-                    context: context,
-                    sellType: SellType.others,
-                    title: 'Others',
-                    icon: Icons.category,
-                    emoji: '📦',
-                    imagePath: null,
-                    color: const Color(0xFF95A5A6),
+                  const SizedBox(height: 16),
+                  
+                  // Horizontal Scrollable Category Grid
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final screenWidth = MediaQuery.of(context).size.width;
+                      final cardWidth = (screenWidth - 48) / 2; // Account for padding and spacing
+                      final cardHeight = cardWidth; // Maintain 1:1 aspect ratio
+                      
+                      // Build category list
+                      final categories = <Map<String, dynamic>>[
+                        {
+                          'sellType': SellType.cookedFood,
+                          'title': 'Food',
+                          'icon': Icons.restaurant,
+                          'emoji': '🍲',
+                          'imagePath': 'assets/images/categories/food.jpg',
+                          'color': Colors.orange,
+                        },
+                        {
+                          'sellType': SellType.groceries,
+                          'title': 'Groceries',
+                          'icon': Icons.shopping_basket,
+                          'emoji': '🛒',
+                          'imagePath': 'assets/images/categories/groceries.jpg',
+                          'color': Colors.blue,
+                        },
+                        {
+                          'sellType': SellType.vegetables,
+                          'title': 'Vegetables & Fruits',
+                          'icon': Icons.eco,
+                          'emoji': '🥬',
+                          'imagePath': 'assets/images/categories/vegetables_fruits.jpg',
+                          'color': Colors.green,
+                        },
+                        {
+                          'sellType': SellType.clothingAndApparel,
+                          'title': 'Clothing',
+                          'icon': Icons.checkroom,
+                          'emoji': '👕',
+                          'imagePath': 'assets/images/categories/clothing.jpg',
+                          'color': Colors.purple,
+                        },
+                        if ((categoryCounts[SellType.liveKitchen] ?? 0) > 0)
+                          {
+                            'sellType': SellType.liveKitchen,
+                            'title': 'Live Kitchen',
+                            'icon': Icons.local_dining,
+                            'emoji': '🔥',
+                            'imagePath': 'assets/images/categories/live kitchen.png',
+                            'color': Colors.red,
+                          },
+                        {
+                          'sellType': SellType.electronics,
+                          'title': 'Electronics',
+                          'icon': Icons.devices,
+                          'emoji': '📱',
+                          'imagePath': null,
+                          'color': const Color(0xFF9B59B6),
+                        },
+                        {
+                          'sellType': SellType.electricals,
+                          'title': 'Electricals',
+                          'icon': Icons.electrical_services,
+                          'emoji': '⚡',
+                          'imagePath': null,
+                          'color': const Color(0xFFE67E22),
+                        },
+                        {
+                          'sellType': SellType.hardware,
+                          'title': 'Hardware',
+                          'icon': Icons.build,
+                          'emoji': '🔧',
+                          'imagePath': null,
+                          'color': const Color(0xFF34495E),
+                        },
+                        {
+                          'sellType': SellType.automobiles,
+                          'title': 'Automobiles',
+                          'icon': Icons.directions_car,
+                          'emoji': '🚗',
+                          'imagePath': null,
+                          'color': const Color(0xFFE74C3C),
+                        },
+                        {
+                          'sellType': SellType.others,
+                          'title': 'Others',
+                          'icon': Icons.category,
+                          'emoji': '📦',
+                          'imagePath': null,
+                          'color': const Color(0xFF95A5A6),
+                        },
+                      ];
+                      
+                      // Pair categories into rows (2 per row)
+                      final pairedCategories = <List<Map<String, dynamic>>>[];
+                      for (int i = 0; i < categories.length; i += 2) {
+                        if (i + 1 < categories.length) {
+                          pairedCategories.add([categories[i], categories[i + 1]]);
+                        } else {
+                          // Odd number - single item in last row
+                          pairedCategories.add([categories[i]]);
+                        }
+                      }
+                      
+                      return SizedBox(
+                        height: cardHeight + 32, // Card height + padding
+                        child: Stack(
+                          children: [
+                            // Horizontal Scrollable ListView
+                            ListView.builder(
+                              scrollDirection: Axis.horizontal,
+                              physics: const BouncingScrollPhysics(),
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              itemCount: pairedCategories.length,
+                              itemBuilder: (context, index) {
+                                final pair = pairedCategories[index];
+                                return Container(
+                                  width: cardWidth * 2 + 16, // 2 cards + spacing
+                                  margin: const EdgeInsets.only(right: 16),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: _buildCategoryCard(
+                                          context: context,
+                                          sellType: pair[0]['sellType'] as SellType,
+                                          title: pair[0]['title'] as String,
+                                          icon: pair[0]['icon'] as IconData,
+                                          emoji: pair[0]['emoji'] as String,
+                                          imagePath: pair[0]['imagePath'] as String?,
+                                          color: pair[0]['color'] as Color,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 16),
+                                      if (pair.length > 1)
+                                        Expanded(
+                                          child: _buildCategoryCard(
+                                            context: context,
+                                            sellType: pair[1]['sellType'] as SellType,
+                                            title: pair[1]['title'] as String,
+                                            icon: pair[1]['icon'] as IconData,
+                                            emoji: pair[1]['emoji'] as String,
+                                            imagePath: pair[1]['imagePath'] as String?,
+                                            color: pair[1]['color'] as Color,
+                                          ),
+                                        )
+                                      else
+                                        const Spacer(),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                            
+                            // Right Fade Gradient (indicates scroll)
+                            Positioned(
+                              right: 0,
+                              top: 0,
+                              bottom: 0,
+                              width: 40,
+                              child: IgnorePointer(
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.centerLeft,
+                                      end: Alignment.centerRight,
+                                      colors: [
+                                        Colors.transparent,
+                                        AppTheme.backgroundColor.withOpacity(0.8),
+                                        AppTheme.backgroundColor,
+                                      ],
+                                      stops: const [0.0, 0.5, 1.0],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
