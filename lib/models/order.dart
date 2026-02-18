@@ -79,6 +79,16 @@ class Order extends HiveObject {
   @HiveField(23)
   final String? selectedColor; // Selected color for clothing items
 
+  // OTP fields for pickup verification
+  @HiveField(24)
+  final String? pickupOtp; // 6-digit OTP for pickup verification
+
+  @HiveField(25)
+  final String? otpStatus; // 'pending' or 'verified'
+
+  @HiveField(26)
+  final DateTime? otpVerifiedAt; // When OTP was verified
+
   Order({
     required this.foodName,
     required this.sellerName,
@@ -104,6 +114,9 @@ class Order extends HiveObject {
     this.statusChangedAt,
     this.selectedSize,
     this.selectedColor,
+    this.pickupOtp,
+    this.otpStatus,
+    this.otpVerifiedAt,
   }) : orderId = orderId ?? DateTime.now().millisecondsSinceEpoch.toString();
 
   // Helper methods for Live Kitchen order status
@@ -133,7 +146,27 @@ class Order extends HiveObject {
           return orderStatus;
       }
     }
-    return orderStatus;
+    // Non-Live Kitchen orders
+    switch (orderStatus) {
+      case 'PaymentPending':
+        return 'Payment Pending';
+      case 'PaymentCompleted':
+        return 'Payment Completed';
+      case 'AwaitingSellerConfirmation':
+        return 'Awaiting Confirmation';
+      case 'AcceptedBySeller':
+        return 'Accepted';
+      case 'ReadyForPickup':
+        return 'Ready for Pickup';
+      case 'RejectedBySeller':
+        return 'Rejected';
+      case 'Completed':
+        return 'Completed';
+      case 'Cancelled':
+        return 'Cancelled';
+      default:
+        return orderStatus;
+    }
   }
 
   Color get statusColor {
@@ -164,6 +197,8 @@ class Order extends HiveObject {
         return Colors.amber;
       case 'AcceptedBySeller':
         return Colors.green;
+      case 'ReadyForPickup':
+        return Colors.green;
       case 'RejectedBySeller':
         return Colors.red;
       case 'Completed':
@@ -174,6 +209,12 @@ class Order extends HiveObject {
         return Colors.grey;
     }
   }
+
+  /// Returns true if OTP is pending verification
+  bool get isOtpPending => otpStatus == 'pending' && pickupOtp != null;
+
+  /// Returns true if OTP has been verified
+  bool get isOtpVerified => otpStatus == 'verified';
 
   bool get canSellerUpdateStatus {
     if (!(isLiveKitchenOrder ?? false)) return false;
