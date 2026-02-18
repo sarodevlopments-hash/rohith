@@ -75,9 +75,14 @@ class ListingFirestoreService {
   static Future<void> upsertListing(Listing listing) async {
     try {
       final listingId = listing.key.toString();
+      print('📤 ListingFirestoreService: Syncing listing to Firestore: $listingId (${listing.name})');
+      
+      final listingData = toMap(listing);
+      print('   Seller ID: ${listing.sellerId}, Key: $listingId');
+      
       // Add timeout to prevent hanging (5 seconds max)
       await doc(listingId)
-          .set(toMap(listing), SetOptions(merge: true))
+          .set(listingData, SetOptions(merge: true))
           .timeout(
             const Duration(seconds: 5),
             onTimeout: () {
@@ -85,12 +90,13 @@ class ListingFirestoreService {
               throw TimeoutException('Firestore sync timed out');
             },
           );
-      print('✅ Listing synced to Firestore: $listingId');
+      print('✅ Listing synced to Firestore: $listingId (${listing.name}) - Document ID: $listingId');
     } on TimeoutException {
       print('⏱️ Firestore sync timed out - listing saved locally only');
       // Don't throw - allow app to continue with local storage
-    } catch (e) {
+    } catch (e, stackTrace) {
       print('❌ Error syncing listing to Firestore: $e');
+      print('   Stack trace: $stackTrace');
       // Don't throw - allow app to continue with local storage
     }
   }
@@ -106,7 +112,7 @@ class ListingFirestoreService {
   }
 
   /// Convert Firestore map back to Listing object
-  static Listing? _fromMap(Map<String, dynamic> data, int key) {
+  static Listing? fromMap(Map<String, dynamic> data, int key) {
     try {
       // Parse enums
       final typeStr = data['type'] as String?;
@@ -278,7 +284,7 @@ class ListingFirestoreService {
           // Restore if it doesn't exist locally OR if Hive box is empty (full restore)
           // This ensures data is restored even if Hive was cleared
           if (existingListing == null || listingBox.isEmpty) {
-            final listing = _fromMap(data, key);
+            final listing = fromMap(data, key);
             if (listing != null) {
               await listingBox.put(key, listing);
               syncedCount++;
@@ -344,7 +350,7 @@ class ListingFirestoreService {
         final key = int.tryParse(listingId);
         
         if (key != null) {
-          final listing = _fromMap(data, key);
+          final listing = fromMap(data, key);
           if (listing != null) {
             listings.add(listing);
           }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -5,8 +6,8 @@ import 'package:hive_flutter/hive_flutter.dart';
 import '../models/order.dart';
 import '../services/notification_service.dart';
 import '../services/order_sync_service.dart';
+import '../services/listing_sync_service.dart';
 import '../services/accepted_order_notification_service.dart';
-import '../services/listing_firestore_service.dart';
 import '../services/firestore_verification_service.dart';
 import '../services/location_service.dart';
 import '../widgets/location_header_widget.dart';
@@ -37,6 +38,7 @@ class _MainTabScreenState extends State<MainTabScreen> {
   int _addListingKey = 0; // Key to force AddListingScreen rebuild
   late final ValueListenable<Box<Order>> _ordersListenable;
   VoidCallback? _ordersListener;
+  StreamSubscription<User?>? _authSubscription;
 
   Widget _buildCartAction(BuildContext context) {
     return ValueListenableBuilder(
@@ -176,23 +178,58 @@ class _MainTabScreenState extends State<MainTabScreen> {
     // with minimal spacing (8-12px gap).
     // Bottom inset: 15px
     NotificationService.pushBottomInset(15);
-    // Start Firestore -> Hive sync for orders so buyer/seller status updates work in real time.
+    // Start Firestore -> Hive sync for orders and listings so updates work in real time.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       OrderSyncService.start();
+      
+      // ✅ Start real-time listing sync (replaces one-time sync)
+      // This keeps listings synchronized across all devices in real-time
+      Future.delayed(const Duration(milliseconds: 1000), () {
+        print('🚀 MainTabScreen: Attempting to start ListingSyncService...');
+        final currentUser = FirebaseAuth.instance.currentUser;
+        if (currentUser != null) {
+          print('   ✅ User is authenticated: ${currentUser.uid}');
+        } else {
+          print('   ⚠️ No authenticated user yet - ListingSyncService will skip');
+        }
+        
+        ListingSyncService.start().then((_) {
+          print('✅ MainTabScreen: ListingSyncService started successfully');
+        }).catchError((e, stackTrace) {
+          print('❌ MainTabScreen: ListingSyncService failed to start: $e');
+          print('   Stack trace: $stackTrace');
+          // Don't block app if Firestore is unavailable - local Hive data will be used
+        });
+      });
       
       // ✅ Verify Firestore database is accessible (diagnostic)
       Future.delayed(const Duration(milliseconds: 500), () {
         FirestoreVerificationService.printVerificationReport();
       });
       
-      // ✅ Sync listings from Firestore on app start (after user is authenticated)
-      // This restores listings that were saved to cloud, ensuring data persistence
-      // Run in background without blocking UI
+      // ✅ Test Firestore rules specifically for listings (critical check)
       Future.delayed(const Duration(milliseconds: 1000), () {
-        ListingFirestoreService.syncListingsFromFirestore().catchError((e) {
-          print('⚠️ Firestore listing sync failed (app will continue with local data): $e');
-          // Don't block app if Firestore is unavailable - local Hive data will be used
-        });
+        ListingSyncService.testRules();
+      });
+      
+      // ✅ Print ListingSyncService diagnostics after delays to catch subscription status
+      // First check after 3 seconds (give subscription time to start)
+      Future.delayed(const Duration(milliseconds: 3000), () {
+        print('');
+        print('📊 First ListingSyncService check (3 seconds after start)...');
+        ListingSyncService.printDiagnostics();
+      });
+      // Second check after 8 seconds (give real-time sync time to populate Hive)
+      Future.delayed(const Duration(milliseconds: 8000), () {
+        print('');
+        print('📊 Second ListingSyncService check (8 seconds after start)...');
+        ListingSyncService.printDiagnostics();
+      });
+      // Final check after 15 seconds (should be fully synced by now)
+      Future.delayed(const Duration(milliseconds: 15000), () {
+        print('');
+        print('📊 Final ListingSyncService check (15 seconds after start)...');
+        ListingSyncService.printDiagnostics();
       });
     });
     _ordersListenable = Hive.box<Order>('ordersBox').listenable();
@@ -209,6 +246,25 @@ class _MainTabScreenState extends State<MainTabScreen> {
     _ordersListenable.addListener(_ordersListener!);
     // Trigger a single initial check after first frame; subsequent checks come from the Hive listener.
     WidgetsBinding.instance.addPostFrameCallback((_) => _ordersListener?.call());
+    
+    // ✅ Listen to auth state changes to restart sync services when user logs in
+    _authSubscription = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (user != null) {
+        print('🔄 MainTabScreen: Auth state changed - user logged in: ${user.uid}');
+        print('   Restarting sync services...');
+        // Restart sync services when user logs in
+        OrderSyncService.start();
+        Future.delayed(const Duration(milliseconds: 500), () {
+          ListingSyncService.start().catchError((e) {
+            print('❌ Failed to restart ListingSyncService after auth change: $e');
+          });
+        });
+      } else {
+        print('🔄 MainTabScreen: Auth state changed - user logged out');
+        // Stop sync services when user logs out
+        ListingSyncService.stop();
+      }
+    });
   }
 
   @override
@@ -217,6 +273,7 @@ class _MainTabScreenState extends State<MainTabScreen> {
     if (_ordersListener != null) {
       _ordersListenable.removeListener(_ordersListener!);
     }
+    _authSubscription?.cancel();
     super.dispose();
   }
 
@@ -512,8 +569,12 @@ class _MainTabScreenState extends State<MainTabScreen> {
 
   List<Widget> _getSellerTabs() {
     final currentUser = FirebaseAuth.instance.currentUser;
+    final sellerId = currentUser?.uid ?? '';
+    
+    // SellerDashboardScreen will handle empty sellerId by checking FirebaseAuth itself
+    // This provides a fallback in case auth state changes
     return [
-      _buildSellerDashboardTab(currentUser?.uid ?? ''),
+      _buildSellerDashboardTab(sellerId),
       _buildSellerAddListingTab(),
     ];
   }

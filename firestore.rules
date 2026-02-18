@@ -13,10 +13,11 @@ service cloud.firestore {
     // - Anyone authenticated can read listings (for buyers to browse)
     // - Only the seller who created it can write/update/delete
     // - Owners have full access
+    // Note: allow read works for both individual documents and collection queries (.get() and .snapshots())
     match /listings/{listingId} {
       // Allow owners to read any listing (including collection queries)
       allow read: if isOwner();
-      // Allow authenticated users to read listings
+      // Allow authenticated users to read listings (works for collection queries too)
       allow read: if request.auth != null;
       allow create: if request.auth != null && 
         (request.resource.data.sellerId == request.auth.uid || isOwner());
@@ -89,8 +90,15 @@ service cloud.firestore {
       }
       
       // Seller Profile subcollection
+      // - Sellers can read/write their own profile
+      // - Buyers need to read seller profiles to get location for distance filtering
+      // - Owners can read all profiles
       match /sellerProfile/{profileId} {
-        allow read: if request.auth != null && request.auth.uid == userId;
+        // Allow owners to read any seller profile
+        allow read: if isOwner();
+        // Allow authenticated users to read seller profiles (buyers need this for distance filtering)
+        allow read: if request.auth != null;
+        // Only sellers can write their own profile
         allow write: if request.auth != null && request.auth.uid == userId;
       }
     }

@@ -6,16 +6,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../models/seller_profile.dart';
 import '../models/cooked_food_source.dart';
 import '../models/sell_type.dart';
+import 'firestore_helper.dart';
 
 class SellerProfileService {
   static const String _boxName = 'sellerProfileBox';
   static const String _profileKey = 'seller_profile';
   
-  // Use the correct database ID: 'reqfood' (not the default)
-  static FirebaseFirestore get _firestore => FirebaseFirestore.instanceFor(
-    app: Firebase.app(),
-    databaseId: 'reqfood',
-  );
+  // Use FirestoreHelper for automatic database fallback
+  static FirebaseFirestore get _firestore => FirestoreHelper.db;
 
   static Future<Box> _getBox() async {
     if (!Hive.isBoxOpen(_boxName)) {
