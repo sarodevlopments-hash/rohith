@@ -6,6 +6,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart' hide Order;
 import '../services/cart_service.dart';
+import '../services/image_storage_service.dart';
 import '../models/listing.dart';
 import '../models/order.dart';
 import '../services/order_firestore_service.dart';
@@ -192,6 +193,11 @@ class _CartPaymentScreenState extends State<CartPaymentScreen> {
           // For regular orders, decrease quantity
           listing.quantity -= item.quantity;
           await listing.save();
+          
+          // Delete images from S3 if out of stock
+          if (listing.quantity <= 0) {
+            await ImageStorageService.deleteImagesIfOutOfStock(listing);
+          }
         }
       }
 

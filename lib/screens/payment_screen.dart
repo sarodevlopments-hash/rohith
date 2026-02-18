@@ -6,6 +6,7 @@ import '../models/listing.dart';
 import '../models/order.dart';
 import '../models/pack_size.dart';
 import '../screens/main_tab_screen.dart';
+import '../services/image_storage_service.dart';
 import '../services/order_firestore_service.dart';
 import '../services/user_service.dart';
 import '../services/seller_profile_service.dart';
@@ -187,6 +188,11 @@ class _PaymentScreenState extends State<PaymentScreen> {
         // For regular orders, decrease quantity
         widget.listing.quantity -= widget.quantity;
         await widget.listing.save();
+        
+        // Delete images from S3 if out of stock
+        if (widget.listing.quantity <= 0) {
+          await ImageStorageService.deleteImagesIfOutOfStock(widget.listing);
+        }
       }
 
       if (mounted) {
