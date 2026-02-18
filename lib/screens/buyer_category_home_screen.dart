@@ -14,6 +14,7 @@ import '../services/location_based_service.dart';
 import '../services/time_based_suggestions_service.dart';
 import '../services/distance_filter_service.dart';
 import '../config/home_features_config.dart';
+import '../widgets/pickup_otp_banner.dart';
 import 'category_listing_screen.dart';
 
 class BuyerCategoryHomeScreen extends StatefulWidget {
@@ -334,6 +335,9 @@ class _BuyerCategoryHomeScreenState extends State<BuyerCategoryHomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+              // Pickup OTP Banner - Shows when order is ready for pickup
+              const PickupOtpBanner(),
+              
               // Total Savings Banner - Premium Gradient
               if (_totalSavings > 0)
                 Container(
