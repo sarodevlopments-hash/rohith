@@ -8,6 +8,8 @@ import '../services/scheduled_listing_service.dart';
 import '../models/measurement_unit.dart';
 import '../models/item_list.dart';
 import '../services/item_list_service.dart';
+import '../services/image_storage_service.dart';
+import '../services/listing_firestore_service.dart';
 import '../theme/app_theme.dart';
 import 'manage_item_lists_screen.dart';
 import 'add_listing_screen.dart';
@@ -1027,7 +1029,7 @@ class _SellerItemManagementScreenState extends State<SellerItemManagementScreen>
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               final newQuantity = int.tryParse(quantityController.text);
               final newPrice = double.tryParse(priceController.text);
               
@@ -1051,6 +1053,11 @@ class _SellerItemManagementScreenState extends State<SellerItemManagementScreen>
               
               // Update quantity (can be updated directly)
               listing.quantity = newQuantity!;
+              
+              // Delete images from S3 if out of stock
+              if (listing.quantity <= 0) {
+                await _deleteListingImages(listing);
+              }
               
               // Update price (need to create new listing since price is final)
               if (newPrice != listing.price) {
@@ -1259,6 +1266,40 @@ class _SellerItemManagementScreenState extends State<SellerItemManagementScreen>
     );
   }
 
+  /// Delete all images associated with a listing from S3
+  Future<void> _deleteListingImages(Listing listing) async {
+    try {
+      final List<String> imageUrls = [];
+      
+      // Add main product image if it's an S3 URL
+      if (listing.imagePath != null && 
+          ImageStorageService.isStorageUrl(listing.imagePath!)) {
+        imageUrls.add(listing.imagePath!);
+      }
+      
+      // Add color images if they exist
+      if (listing.colorImages != null) {
+        for (final colorImageUrl in listing.colorImages!.values) {
+          if (ImageStorageService.isStorageUrl(colorImageUrl)) {
+            imageUrls.add(colorImageUrl);
+          }
+        }
+      }
+      
+      // Delete all images
+      if (imageUrls.isNotEmpty) {
+        print('🗑️ Deleting ${imageUrls.length} image(s) from S3 for listing: ${listing.name}');
+        await ImageStorageService.deleteImages(imageUrls);
+        print('✅ All images deleted from S3');
+      } else {
+        print('ℹ️ No S3 images to delete for listing: ${listing.name}');
+      }
+    } catch (e) {
+      print('⚠️ Error deleting images from S3 (continuing with listing deletion): $e');
+      // Don't throw - allow listing deletion to proceed even if image deletion fails
+    }
+  }
+
   void _showDeleteConfirmation(BuildContext context, Listing listing) {
     showDialog(
       context: context,
@@ -1271,15 +1312,68 @@ class _SellerItemManagementScreenState extends State<SellerItemManagementScreen>
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
-              listing.delete();
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Item deleted successfully'),
-                  backgroundColor: Colors.green,
-                ),
-              );
+            onPressed: () async {
+              try {
+                // Get the listing key before deletion
+                final listingKey = listing.key;
+                if (listingKey == null) {
+                  print('⚠️ Listing key is null, cannot delete');
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Error: Listing key is missing'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                  return;
+                }
+                
+                final listingId = listingKey.toString();
+                print('🗑️ Deleting listing: ${listing.name} (key: $listingId)');
+                
+                // Delete images from S3 before deleting the listing
+                await _deleteListingImages(listing);
+                
+                // Delete from Firestore
+                await ListingFirestoreService.deleteListing(listingId);
+                
+                // Delete from local Hive storage
+                // Get the listing from the box to ensure it's attached
+                final box = Hive.box<Listing>('listingBox');
+                final listingFromBox = box.get(listingKey);
+                
+                if (listingFromBox != null) {
+                  // Delete using the box directly
+                  await box.delete(listingKey);
+                  print('✅ Listing deleted from Hive: $listingId');
+                } else {
+                  print('⚠️ Listing not found in Hive box (may have been already deleted)');
+                }
+                
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Item deleted successfully'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e, stackTrace) {
+                print('❌ Error deleting listing: $e');
+                print('   Stack trace: $stackTrace');
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error deleting item: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('Delete'),
