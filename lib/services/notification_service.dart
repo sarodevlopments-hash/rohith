@@ -748,7 +748,8 @@ class NotificationService {
       // Check if order is for this buyer and was recently accepted
       final isForBuyer = order.userId == buyerId;
       final isAccepted = order.orderStatus == 'AcceptedBySeller' || 
-                         order.orderStatus == 'Confirmed';
+                         order.orderStatus == 'Confirmed' ||
+                         order.orderStatus == 'ReadyForPickup';
       
       // Only show for recent orders (within last 7 days)
       final orderTime = order.paymentCompletedAt ?? order.purchasedAt;

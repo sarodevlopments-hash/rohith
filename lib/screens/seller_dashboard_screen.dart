@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/listing.dart';
 import '../models/order.dart';
 import '../models/seller_review.dart';
@@ -15,6 +16,7 @@ import '../services/notification_service.dart';
 import '../services/order_firestore_service.dart';
 import '../services/web_order_broadcast.dart';
 import '../services/seller_profile_service.dart';
+import '../services/otp_service.dart';
 import '../theme/app_theme.dart';
 import '../models/sell_type.dart';
 import '../models/seller_profile.dart';
@@ -34,11 +36,21 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
   DateTime? _customStartDate;
   DateTime? _customEndDate;
 
+  /// Get the effective seller ID, falling back to FirebaseAuth if widget.sellerId is empty
+  String get _effectiveSellerId {
+    if (widget.sellerId.isNotEmpty) {
+      return widget.sellerId;
+    }
+    // Fallback to FirebaseAuth
+    final currentUser = FirebaseAuth.instance.currentUser;
+    return currentUser?.uid ?? '';
+  }
+
   @override
 Widget build(BuildContext context) {
   // Validate sellerId
-  if (widget.sellerId.isEmpty) {
-  return Scaffold(
+  if (_effectiveSellerId.isEmpty) {
+    return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         elevation: 0,
@@ -70,13 +82,25 @@ Widget build(BuildContext context) {
                 style: AppTheme.bodyMedium,
                 textAlign: TextAlign.center,
               ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () {
+                  // Force rebuild to check auth state again
+                  setState(() {});
+                },
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                ),
+              ),
             ],
           ),
         ),
       ),
     );
   }
-
+  
   return Scaffold(
       backgroundColor: AppTheme.backgroundColor, // Premium pastel background
       appBar: AppBar(
@@ -110,21 +134,21 @@ Widget build(BuildContext context) {
             valueListenable: ordersBox.listenable(),
         builder: (context, Box<Order> ordersBox, _) {
           // Check for new orders when orders box changes (immediately, not just post-frame)
-          NotificationService.checkForNewOrders(context, widget.sellerId);
+          NotificationService.checkForNewOrders(context, _effectiveSellerId);
           
           return ValueListenableBuilder(
                 valueListenable: listingBox.listenable(),
             builder: (context, Box<Listing> listingBox, _) {
                   try {
               final myListings = listingBox.values
-                  .where((l) => l.sellerId == widget.sellerId)
+.where((l) => l.sellerId == _effectiveSellerId)
                   .toList();
 
               // Filter orders by sellerId (new field) or by listing sellerId (backward compatibility)
               final myOrders = ordersBox.values
                   .where((order) {
                     // First check if order has sellerId field (new orders)
-                    if (order.sellerId.isNotEmpty && order.sellerId == widget.sellerId) {
+                    if (order.sellerId.isNotEmpty && order.sellerId == _effectiveSellerId) {
                       return true;
                     }
                     // Fallback: check via listing (for old orders)
@@ -132,7 +156,7 @@ Widget build(BuildContext context) {
                       final listingKey = int.tryParse(order.listingId);
                       if (listingKey != null) {
                         final listing = listingBox.get(listingKey);
-                        return listing?.sellerId == widget.sellerId;
+                        return listing?.sellerId == _effectiveSellerId;
                       }
                     } catch (e) {
                       return false;
@@ -1237,16 +1261,41 @@ Widget build(BuildContext context) {
       // Dismiss notification immediately before updating status
       NotificationService.dismissNotificationForOrder(order.orderId, context);
       
-      order.orderStatus = 'AcceptedBySeller';
-      order.sellerRespondedAt = DateTime.now();
-      await order.save();
-      await OrderFirestoreService.updateStatus(
-        orderId: order.orderId,
-        status: 'AcceptedBySeller',
-        sellerRespondedAt: order.sellerRespondedAt,
-      );
+      // Generate OTP for pickup verification
+      final otp = OtpService.generateOtp();
       
-      // Ensure seller details are saved to Firestore (in case they weren't saved when order was created)
+      // For non-Live Kitchen orders: Accepted → ReadyForPickup (with OTP)
+      // For Live Kitchen orders: Accepted → Preparing (no OTP yet, OTP generated when ReadyForPickup)
+      final isLiveKitchen = order.isLiveKitchenOrder ?? false;
+      final newStatus = isLiveKitchen ? 'Preparing' : 'ReadyForPickup';
+      
+      order.orderStatus = newStatus;
+      order.sellerRespondedAt = DateTime.now();
+      
+      // Set OTP fields only for non-Live Kitchen (Live Kitchen gets OTP when moving to ReadyForPickup)
+      if (!isLiveKitchen) {
+        // Note: Order model fields are final, so we need to update via Firestore
+        // We'll update the order in Hive and Firestore separately
+        await order.save();
+        
+        // Update Firestore with status and OTP
+        await OrderFirestoreService.updateMeta(order.orderId, {
+          'orderStatus': newStatus,
+          'sellerRespondedAt': order.sellerRespondedAt?.toUtc(),
+          'pickupOtp': otp,
+          'otpStatus': 'pending',
+        });
+      } else {
+        // Live Kitchen: just update status to Preparing
+        await order.save();
+        await OrderFirestoreService.updateStatus(
+          orderId: order.orderId,
+          status: newStatus,
+          sellerRespondedAt: order.sellerRespondedAt,
+        );
+      }
+      
+      // Ensure seller details are saved to Firestore
       try {
         final sellerProfile = await SellerProfileService.getProfile(order.sellerId);
         if (sellerProfile != null) {
@@ -1260,13 +1309,16 @@ Widget build(BuildContext context) {
         print('Failed to update seller details: $e');
       }
       
-      WebOrderBroadcast.postStatus(orderId: order.orderId, status: 'AcceptedBySeller');
+      WebOrderBroadcast.postStatus(orderId: order.orderId, status: newStatus);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Order accepted successfully!'),
+          SnackBar(
+            content: Text(isLiveKitchen 
+              ? 'Order accepted! Start preparing...'
+              : 'Order accepted! OTP generated: $otp'),
             backgroundColor: Colors.green,
+            duration: const Duration(seconds: 4),
           ),
         );
       }
@@ -1714,11 +1766,11 @@ Widget build(BuildContext context) {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: () => _updateLiveKitchenOrderStatus(order, 'Completed'),
-                icon: const Icon(Icons.done_all, size: 18),
-                label: const Text('Mark Completed'),
+                onPressed: () => _showOtpVerificationDialog(order),
+                icon: const Icon(Icons.verified_user, size: 18),
+                label: const Text('Verify Pickup OTP'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.grey.shade600,
+                  backgroundColor: AppTheme.teal,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
@@ -1732,15 +1784,31 @@ Widget build(BuildContext context) {
 
   Future<void> _updateLiveKitchenOrderStatus(Order order, String newStatus) async {
     try {
+      // Generate OTP when moving to ReadyForPickup
+      String? otp;
+      if (newStatus == 'ReadyForPickup') {
+        otp = OtpService.generateOtp();
+      }
+      
       order.orderStatus = newStatus;
       order.statusChangedAt = DateTime.now();
       await order.save();
       
-      await OrderFirestoreService.updateStatus(
-        orderId: order.orderId,
-        status: newStatus,
-        sellerRespondedAt: order.statusChangedAt,
-      );
+      // Update Firestore with status and OTP (if applicable)
+      if (otp != null) {
+        await OrderFirestoreService.updateMeta(order.orderId, {
+          'orderStatus': newStatus,
+          'sellerRespondedAt': order.statusChangedAt?.toUtc(),
+          'pickupOtp': otp,
+          'otpStatus': 'pending',
+        });
+      } else {
+        await OrderFirestoreService.updateStatus(
+          orderId: order.orderId,
+          status: newStatus,
+          sellerRespondedAt: order.statusChangedAt,
+        );
+      }
       
       WebOrderBroadcast.postStatus(orderId: order.orderId, status: newStatus);
 
@@ -1760,8 +1828,11 @@ Widget build(BuildContext context) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Order status updated to: ${order.statusDisplayText}'),
+            content: Text(otp != null 
+              ? 'Order ready! OTP generated: $otp'
+              : 'Order status updated to: ${order.statusDisplayText}'),
             backgroundColor: Colors.green,
+            duration: otp != null ? const Duration(seconds: 4) : const Duration(seconds: 2),
           ),
         );
       }
@@ -1784,6 +1855,215 @@ Widget build(BuildContext context) {
     if (difference.inMinutes < 60) return '${difference.inMinutes}m ago';
     if (difference.inHours < 24) return '${difference.inHours}h ago';
     return dateTime.toLocal().toString().split(' ')[0];
+  }
+
+  /// Show OTP verification dialog for seller to verify buyer's OTP
+  Future<void> _showOtpVerificationDialog(Order order) async {
+    final otpController = TextEditingController();
+    bool isVerifying = false;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.verified_user, color: AppTheme.teal),
+              SizedBox(width: 8),
+              Text('Verify Pickup OTP'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Enter the OTP shown by the buyer to verify pickup:',
+                style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: otpController,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                decoration: InputDecoration(
+                  labelText: 'OTP',
+                  hintText: 'Enter 6-digit OTP',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  prefixIcon: const Icon(Icons.lock_outline),
+                ),
+                enabled: !isVerifying,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: isVerifying ? null : () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: isVerifying ? null : () async {
+                final enteredOtp = otpController.text.trim();
+                if (enteredOtp.length != 6) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please enter a valid 6-digit OTP'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+
+                setState(() => isVerifying = true);
+
+                try {
+                  // First, verify that OTP exists in Firestore
+                  final orderDoc = await OrderFirestoreService.doc(order.orderId).get();
+                  if (!orderDoc.exists) {
+                    if (mounted) {
+                      setState(() => isVerifying = false);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('❌ Order not found in database.'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                    return;
+                  }
+
+                  final orderData = orderDoc.data();
+                  final storedOtp = orderData?['pickupOtp'] as String?;
+                  
+                  if (storedOtp == null || storedOtp.isEmpty) {
+                    if (mounted) {
+                      setState(() => isVerifying = false);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('❌ No OTP found for this order. Please contact support.'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                    return;
+                  }
+
+                  print('🔐 Verifying OTP - Stored: $storedOtp, Provided: $enteredOtp');
+
+                  // Verify OTP via Firestore service
+                  final isValid = await OrderFirestoreService.verifyOtp(
+                    orderId: order.orderId,
+                    providedOtp: enteredOtp,
+                  ).timeout(
+                    const Duration(seconds: 10),
+                    onTimeout: () {
+                      print('OTP verification timed out');
+                      return false;
+                    },
+                  );
+
+                  if (!mounted) return;
+
+                  if (isValid) {
+                    // Update local order in Hive box (if it exists)
+                    try {
+                      final ordersBox = Hive.box<Order>('ordersBox');
+                      final orderKey = ordersBox.keys.firstWhere(
+                        (key) {
+                          final o = ordersBox.get(key);
+                          return o?.orderId == order.orderId;
+                        },
+                        orElse: () => null,
+                      );
+                      
+                      if (orderKey != null) {
+                        final localOrder = ordersBox.get(orderKey);
+                        if (localOrder != null) {
+                          localOrder.orderStatus = 'Completed';
+                          localOrder.statusChangedAt = DateTime.now();
+                          await localOrder.save();
+                        }
+                      }
+                    } catch (e) {
+                      print('⚠️ Could not update local order in Hive: $e');
+                      // Continue anyway - Firestore is the source of truth
+                    }
+
+                    // Sync to Firestore (already done by verifyOtp, but ensure status is synced)
+                    await OrderFirestoreService.updateStatus(
+                      orderId: order.orderId,
+                      status: 'Completed',
+                      sellerRespondedAt: DateTime.now(),
+                    );
+
+                    // Free up Live Kitchen capacity if applicable
+                    if (order.isLiveKitchenOrder ?? false) {
+                      final listingBox = Hive.box<Listing>('listingBox');
+                      final listingKey = int.tryParse(order.listingId);
+                      if (listingKey != null) {
+                        final listing = listingBox.get(listingKey);
+                        if (listing != null && listing.isLiveKitchen) {
+                          listing.completeLiveKitchenOrder();
+                          await listing.save();
+                        }
+                      }
+                    }
+
+                    WebOrderBroadcast.postStatus(orderId: order.orderId, status: 'Completed');
+
+                    if (mounted) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('✅ OTP verified! Order marked as completed.'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    }
+                  } else {
+                    if (mounted) {
+                      setState(() => isVerifying = false);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('❌ Invalid OTP. Please try again.'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                } catch (e) {
+                  print('Error during OTP verification: $e');
+                  if (mounted) {
+                    setState(() => isVerifying = false);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error verifying OTP: ${e.toString()}'),
+                        backgroundColor: Colors.red,
+                        duration: const Duration(seconds: 3),
+                      ),
+                    );
+                  }
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.teal,
+                foregroundColor: Colors.white,
+              ),
+              child: isVerifying
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text('Verify'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   // Debug section to show all orders (temporary - for troubleshooting)
@@ -2129,7 +2409,7 @@ Widget build(BuildContext context) {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => SellerTransactionsScreen(sellerId: widget.sellerId),
+                  builder: (_) => SellerTransactionsScreen(sellerId: _effectiveSellerId),
                 ),
               );
             },
@@ -2145,7 +2425,7 @@ Widget build(BuildContext context) {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => SellerItemInsightsScreen(sellerId: widget.sellerId),
+                  builder: (_) => SellerItemInsightsScreen(sellerId: _effectiveSellerId),
                 ),
               );
             },
@@ -2161,7 +2441,7 @@ Widget build(BuildContext context) {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => SellerReviewsScreen(sellerId: widget.sellerId),
+                  builder: (_) => SellerReviewsScreen(sellerId: _effectiveSellerId),
                             ),
                           );
                         },
@@ -2173,7 +2453,7 @@ Widget build(BuildContext context) {
 
   Widget _buildGroceryOnboardingCard() {
     return FutureBuilder<SellerProfile?>(
-      future: SellerProfileService.getProfile(widget.sellerId),
+      future: SellerProfileService.getProfile(_effectiveSellerId),
       builder: (context, snapshot) {
         final hasCompletedOnboarding = snapshot.data?.groceryOnboardingCompleted ?? false;
 
@@ -2317,7 +2597,7 @@ Widget build(BuildContext context) {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => SellerItemManagementScreen(sellerId: widget.sellerId),
+              builder: (_) => SellerItemManagementScreen(sellerId: _effectiveSellerId),
           ),
         );
       },
@@ -2395,7 +2675,7 @@ Widget build(BuildContext context) {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => SellerItemInsightsScreen(sellerId: widget.sellerId),
+                    builder: (_) => SellerItemInsightsScreen(sellerId: _effectiveSellerId),
                   ),
                 );
               },
@@ -2442,7 +2722,7 @@ Widget build(BuildContext context) {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => SellerItemInsightsScreen(sellerId: widget.sellerId),
+                      builder: (_) => SellerItemInsightsScreen(sellerId: _effectiveSellerId),
                     ),
                   );
                 },
@@ -2591,7 +2871,7 @@ Widget build(BuildContext context) {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => SellerReviewsScreen(sellerId: widget.sellerId),
+                    builder: (_) => SellerReviewsScreen(sellerId: _effectiveSellerId),
                   ),
                 );
               },
@@ -2613,7 +2893,7 @@ Widget build(BuildContext context) {
         const SizedBox(height: 16),
         FutureBuilder<List<SellerReview>>(
           future: SellerReviewService.getSellerReviews(
-            sellerId: widget.sellerId,
+            sellerId: _effectiveSellerId,
             limit: 3,
             approvedOnly: true,
           ),
@@ -2653,7 +2933,7 @@ Widget build(BuildContext context) {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'SellerId: ${widget.sellerId}',
+                      'SellerId: ${_effectiveSellerId}',
                       style: TextStyle(color: Colors.grey.shade600, fontSize: 10),
                     ),
                   ],
@@ -2662,7 +2942,7 @@ Widget build(BuildContext context) {
             }
 
             final reviews = snapshot.data ?? [];
-            print('[SellerDashboard] ✅ Loaded ${reviews.length} reviews for seller ${widget.sellerId}');
+            print('[SellerDashboard] ✅ Loaded ${reviews.length} reviews for seller ${_effectiveSellerId}');
             if (reviews.isNotEmpty) {
               print('[SellerDashboard] First review: sellerId=${reviews.first.sellerId}, rating=${reviews.first.rating}');
             }
@@ -2809,8 +3089,8 @@ Widget build(BuildContext context) {
         return ['Preparing', 'ReadyForPickup', 'ReadyForDelivery', 'Completed'].contains(o.orderStatus);
       }
       
-      // For regular orders, only count accepted or completed
-      return ['AcceptedBySeller', 'Completed'].contains(o.orderStatus);
+      // For regular orders, count accepted, ready for pickup, or completed
+      return ['AcceptedBySeller', 'ReadyForPickup', 'Completed'].contains(o.orderStatus);
     }).toList();
     
     final totalOrders = acceptedOrders.length;
@@ -2869,8 +3149,8 @@ Widget build(BuildContext context) {
         return ['Preparing', 'ReadyForPickup', 'ReadyForDelivery', 'Completed'].contains(o.orderStatus);
       }
       
-      // For regular orders, only count accepted or completed
-      return ['AcceptedBySeller', 'Completed'].contains(o.orderStatus);
+      // For regular orders, count accepted, ready for pickup, or completed
+      return ['AcceptedBySeller', 'ReadyForPickup', 'Completed'].contains(o.orderStatus);
     }).toList();
 
     if (timeRange == 'Daily') {

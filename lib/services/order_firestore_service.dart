@@ -36,6 +36,9 @@ class OrderFirestoreService {
       'selectedPackLabel': o.selectedPackLabel,
       'selectedSize': o.selectedSize,
       'selectedColor': o.selectedColor,
+      'pickupOtp': o.pickupOtp,
+      'otpStatus': o.otpStatus,
+      'otpVerifiedAt': o.otpVerifiedAt?.toUtc(),
       'updatedAt': FieldValue.serverTimestamp(),
     };
   }
@@ -99,7 +102,67 @@ class OrderFirestoreService {
       selectedPackLabel: m['selectedPackLabel'] as String?,
       selectedSize: m['selectedSize'] as String?,
       selectedColor: m['selectedColor'] as String?,
+      pickupOtp: m['pickupOtp'] as String?,
+      otpStatus: m['otpStatus'] as String?,
+      otpVerifiedAt: m['otpVerifiedAt'] == null ? null : _dt(m['otpVerifiedAt']),
     );
+  }
+
+  /// Verify OTP and update order status to Completed
+  static Future<bool> verifyOtp({
+    required String orderId,
+    required String providedOtp,
+  }) async {
+    try {
+      print('🔐 Verifying OTP for order: $orderId');
+      print('🔐 Provided OTP: $providedOtp');
+      
+      final docSnapshot = await doc(orderId).get();
+      if (!docSnapshot.exists) {
+        print('❌ Order document does not exist');
+        return false;
+      }
+
+      final data = docSnapshot.data()!;
+      final storedOtp = data['pickupOtp'] as String?;
+      final currentStatus = data['orderStatus'] as String?;
+      
+      print('🔐 Stored OTP: $storedOtp');
+      print('🔐 Current status: $currentStatus');
+
+      // Validate OTP
+      if (storedOtp == null || storedOtp.trim().isEmpty) {
+        print('❌ No OTP stored for this order');
+        return false;
+      }
+      
+      if (storedOtp.trim() != providedOtp.trim()) {
+        print('❌ OTP mismatch. Stored: $storedOtp, Provided: $providedOtp');
+        return false;
+      }
+
+      print('✅ OTP matches! Updating order status...');
+
+      // Update order: mark OTP as verified and set status to Completed
+      // Keep the OTP in the document (don't remove it) until status is Completed
+      await doc(orderId).set(
+        {
+          'otpStatus': 'verified',
+          'otpVerifiedAt': FieldValue.serverTimestamp(),
+          'orderStatus': 'Completed',
+          'updatedAt': FieldValue.serverTimestamp(),
+          // Keep pickupOtp in the document - don't remove it
+        },
+        SetOptions(merge: true),
+      );
+
+      print('✅ Order status updated to Completed');
+      return true;
+    } catch (e, stackTrace) {
+      print('❌ Error verifying OTP: $e');
+      print('Stack trace: $stackTrace');
+      return false;
+    }
   }
 }
 

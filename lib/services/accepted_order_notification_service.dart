@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../models/order.dart';
 import '../widgets/persistent_order_notification.dart';
 import 'order_firestore_service.dart';
+import 'seller_profile_service.dart';
 
 class AcceptedOrderNotificationService {
   static final Set<String> _dismissedNotifications = {};
@@ -112,7 +113,7 @@ class AcceptedOrderNotificationService {
         }
       }
       
-      // For regular orders: ONLY check for AcceptedBySeller or Confirmed
+      // For regular orders: Check for AcceptedBySeller, Confirmed, or ReadyForPickup (new OTP flow)
       // For Live Kitchen orders: check for Preparing, ReadyForPickup, or ReadyForDelivery
       // (OrderReceived is too early - seller hasn't accepted yet)
       final isAccepted = isLiveKitchen
@@ -120,7 +121,8 @@ class AcceptedOrderNotificationService {
              order.orderStatus == 'ReadyForPickup' || 
              order.orderStatus == 'ReadyForDelivery')
           : (order.orderStatus == 'AcceptedBySeller' || 
-             order.orderStatus == 'Confirmed');
+             order.orderStatus == 'Confirmed' ||
+             order.orderStatus == 'ReadyForPickup');
       
       // CRITICAL: Double-check status matches - if status doesn't match accepted status, skip
       if (!isAccepted) {
@@ -241,8 +243,9 @@ class AcceptedOrderNotificationService {
             _inFlightNotifications.remove(notificationKey);
             return;
           }
-          // For regular orders, verify Firestore status is actually accepted
-          if (!isLiveKitchen && firestoreStatus != 'AcceptedBySeller' && firestoreStatus != 'Confirmed') {
+          // For regular orders, verify Firestore status is actually accepted (including ReadyForPickup for OTP flow)
+          if (!isLiveKitchen && firestoreStatus != 'AcceptedBySeller' && 
+              firestoreStatus != 'Confirmed' && firestoreStatus != 'ReadyForPickup') {
             debugPrint('[AcceptedOrderNotification] Order ${order.orderId} Firestore status is not accepted (${firestoreStatus}), aborting notification');
             // Mark as dismissed to prevent re-checking
             _dismissedNotifications.add(notificationKey);
@@ -252,8 +255,17 @@ class AcceptedOrderNotificationService {
             _inFlightNotifications.remove(notificationKey);
             return;
           }
-          // CRITICAL: Verify Firestore status matches local status
-          if (firestoreStatus != order.orderStatus) {
+          // CRITICAL: For ReadyForPickup status, use Firestore status as source of truth
+          // Local order might not be updated yet, so we check Firestore status instead
+          // Only abort if Firestore status is still pending
+          if (firestoreStatus == 'ReadyForPickup' && order.orderStatus != 'ReadyForPickup') {
+            // Firestore shows ReadyForPickup but local doesn't - this is OK, use Firestore status
+            debugPrint('[AcceptedOrderNotification] Order ${order.orderId} Firestore status is ReadyForPickup but local is ${order.orderStatus} - using Firestore status');
+            // Update local order status to match Firestore for notification purposes
+            order.orderStatus = firestoreStatus;
+          } else if (firestoreStatus != order.orderStatus && 
+                     !['ReadyForPickup', 'AcceptedBySeller', 'Confirmed'].contains(firestoreStatus)) {
+            // If statuses don't match and Firestore doesn't show accepted status, abort
             debugPrint('[AcceptedOrderNotification] Order ${order.orderId} Firestore status (${firestoreStatus}) doesn\'t match local status (${order.orderStatus}), aborting');
             _inFlightNotifications.remove(notificationKey);
             return;
@@ -284,6 +296,34 @@ class AcceptedOrderNotificationService {
       return;
     }
 
+    // If seller details are missing from Firestore, try to fetch from seller profile
+    final needsPhone = sellerPhone == null || sellerPhone.isEmpty;
+    final needsLocation = pickupLocation == null || pickupLocation.isEmpty;
+    if ((needsPhone || needsLocation) && order.sellerId.isNotEmpty) {
+      debugPrint('[AcceptedOrderNotification] Seller details missing from Firestore, fetching from seller profile...');
+      try {
+        final sellerProfile = await SellerProfileService.getProfile(order.sellerId);
+        if (sellerProfile != null) {
+          // Also update Firestore with seller details for future use
+          final metaData = <String, dynamic>{};
+          if (needsPhone && sellerProfile.phoneNumber.isNotEmpty) {
+            sellerPhone = sellerProfile.phoneNumber;
+            metaData['sellerPhone'] = sellerPhone;
+          }
+          if (needsLocation && sellerProfile.pickupLocation.isNotEmpty) {
+            pickupLocation = sellerProfile.pickupLocation;
+            metaData['sellerPickupLocation'] = pickupLocation;
+          }
+          if (metaData.isNotEmpty) {
+            await OrderFirestoreService.updateMeta(order.orderId, metaData);
+          }
+        }
+      } catch (e) {
+        debugPrint('[AcceptedOrderNotification] Failed to fetch seller profile: $e');
+        // Continue anyway - notification will show but buttons might be disabled
+      }
+    }
+
     // FINAL CHECK: Verify order is still accepted before showing (prevent race conditions)
     final pendingStatuses = ['PaymentPending', 'PaymentCompleted', 'AwaitingSellerConfirmation'];
     if (pendingStatuses.contains(order.orderStatus)) {
@@ -312,7 +352,8 @@ class AcceptedOrderNotificationService {
            order.orderStatus == 'ReadyForPickup' || 
            order.orderStatus == 'ReadyForDelivery')
         : (order.orderStatus == 'AcceptedBySeller' || 
-           order.orderStatus == 'Confirmed');
+           order.orderStatus == 'Confirmed' ||
+           order.orderStatus == 'ReadyForPickup');
     
     if (!isStillAccepted) {
       debugPrint('[AcceptedOrderNotification] Order ${order.orderId} is not accepted (status: ${order.orderStatus}), aborting notification');

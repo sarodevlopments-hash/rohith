@@ -41,13 +41,16 @@ class OrderAdapter extends TypeAdapter<Order> {
       statusChangedAt: fields[21] as DateTime?,
       selectedSize: fields[22] as String?,
       selectedColor: fields[23] as String?,
+      pickupOtp: fields[24] as String?,
+      otpStatus: fields[25] as String?,
+      otpVerifiedAt: fields[26] as DateTime?,
     );
   }
 
   @override
   void write(BinaryWriter writer, Order obj) {
     writer
-      ..writeByte(24)
+      ..writeByte(27)
       ..writeByte(0)
       ..write(obj.foodName)
       ..writeByte(1)
@@ -95,7 +98,13 @@ class OrderAdapter extends TypeAdapter<Order> {
       ..writeByte(22)
       ..write(obj.selectedSize)
       ..writeByte(23)
-      ..write(obj.selectedColor);
+      ..write(obj.selectedColor)
+      ..writeByte(24)
+      ..write(obj.pickupOtp)
+      ..writeByte(25)
+      ..write(obj.otpStatus)
+      ..writeByte(26)
+      ..write(obj.otpVerifiedAt);
   }
 
   @override

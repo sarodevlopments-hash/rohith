@@ -18,7 +18,6 @@ import '../widgets/seller_name_widget.dart';
 import '../theme/app_theme.dart';
 import 'write_product_review_screen.dart';
 import 'write_seller_review_screen.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 
 class OrderDetailsScreen extends StatefulWidget {
   final Order order;
@@ -95,7 +94,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          order.orderStatus,
+                          order.statusDisplayText,
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
@@ -444,8 +443,16 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         final firestoreStatus = (data['orderStatus'] as String?) ?? order.orderStatus;
         final isAcceptedFirestore = firestoreStatus == 'AcceptedBySeller' ||
                                     firestoreStatus == 'Confirmed' ||
+                                    firestoreStatus == 'ReadyForPickup' ||
                                     firestoreStatus == 'Completed';
         final finalIsAccepted = isAccepted || isAcceptedFirestore;
+        
+        // Get OTP information
+        // OTP should remain visible until order status is 'Completed'
+        final pickupOtp = (data['pickupOtp'] as String?) ?? '';
+        // Show OTP if status is ReadyForPickup and order is not yet Completed
+        final shouldShowOtp = firestoreStatus == 'ReadyForPickup' && 
+                              pickupOtp.isNotEmpty;
 
         if (isSellerView) {
           // Seller view: Show seller's own details (phone and pickup location)
@@ -509,6 +516,68 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Show OTP if order is ready for pickup (until completed)
+              if (shouldShowOtp && !isSellerView) ...[
+                Container(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [AppTheme.teal.withOpacity(0.1), AppTheme.teal.withOpacity(0.05)],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.teal.withOpacity(0.3), width: 2),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.qr_code, color: AppTheme.teal, size: 24),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Pickup OTP',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.teal,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Show this OTP to the seller to collect your order:',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppTheme.teal, width: 2),
+                        ),
+                        child: Center(
+                          child: Text(
+                            pickupOtp,
+                            style: TextStyle(
+                              fontSize: 32,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 8,
+                              color: AppTheme.teal,
+                              fontFamily: 'monospace',
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               // Show seller name for groceries/vegetables after acceptance
               if (order.shouldHideSellerIdentity()) ...[
                 _buildDetailRow(
