@@ -561,14 +561,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
           // Listings
           Expanded(
-            child: ValueListenableBuilder(
+              child: ValueListenableBuilder(
               valueListenable: Hive.box<Listing>('listingBox').listenable(),
               builder: (context, Box<Listing> box, _) {
                 final allListings = box.values.toList();
+                debugPrint('[HomeScreen] Total listings in Hive: ${allListings.length}');
                 final filteredListings = _filterListings(allListings);
+                debugPrint('[HomeScreen] After basic filters: ${filteredListings.length} listings');
 
                 // Apply distance filtering if enabled
                 if (_useLocationFilter && filteredListings.isNotEmpty) {
+                  debugPrint('[HomeScreen] Applying distance filter (location filter enabled)');
                   return FutureBuilder<List<ListingWithDistance>>(
                     future: DistanceFilterService.filterByDistance(filteredListings),
                     builder: (context, snapshot) {
@@ -585,8 +588,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       }
 
                       final listingsWithDistance = snapshot.data ?? [];
+                      debugPrint('[HomeScreen] After distance filter: ${listingsWithDistance.length} listings');
                       
                       if (listingsWithDistance.isEmpty) {
+                        debugPrint('[HomeScreen] No listings after distance filter - showing empty state');
                         return Center(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
