@@ -51,13 +51,14 @@ class ListingAdapter extends TypeAdapter<Listing> {
       reviewCount: fields[30] == null ? 0 : fields[30] as int,
       isFeatured: fields[31] == null ? false : fields[31] as bool?,
       featuredPriority: fields[32] == null ? 0 : fields[32] as int?,
+      categoryAttributes: (fields[33] as Map?)?.cast<String, String>(),
     );
   }
 
   @override
   void write(BinaryWriter writer, Listing obj) {
     writer
-      ..writeByte(33)
+      ..writeByte(34)
       ..writeByte(0)
       ..write(obj.name)
       ..writeByte(1)
@@ -123,7 +124,9 @@ class ListingAdapter extends TypeAdapter<Listing> {
       ..writeByte(31)
       ..write(obj.isFeatured)
       ..writeByte(32)
-      ..write(obj.featuredPriority);
+      ..write(obj.featuredPriority)
+      ..writeByte(33)
+      ..write(obj.categoryAttributes);
   }
 
   @override

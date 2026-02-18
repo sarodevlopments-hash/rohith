@@ -111,6 +111,9 @@ class Listing extends HiveObject {
   @HiveField(32, defaultValue: 0)
   final int? featuredPriority; // Priority level for featured listings (higher = shown first) (nullable for backward compatibility)
 
+  @HiveField(33)
+  final Map<String, String>? categoryAttributes; // Dynamic attributes for category-specific fields (e.g., brand, model, warranty, etc.)
+
   Listing({
     required this.name,
     required this.sellerName,
@@ -145,6 +148,7 @@ class Listing extends HiveObject {
     this.reviewCount = 0,
     bool? isFeatured,
     int? featuredPriority,
+    this.categoryAttributes,
   }) : isFeatured = isFeatured ?? false,
        featuredPriority = featuredPriority ?? 0;
 
