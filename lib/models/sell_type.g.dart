@@ -23,6 +23,16 @@ class SellTypeAdapter extends TypeAdapter<SellType> {
         return SellType.clothingAndApparel;
       case 4:
         return SellType.liveKitchen;
+      case 5:
+        return SellType.electronics;
+      case 6:
+        return SellType.electricals;
+      case 7:
+        return SellType.hardware;
+      case 8:
+        return SellType.automobiles;
+      case 9:
+        return SellType.others;
       default:
         return SellType.cookedFood;
     }
@@ -45,6 +55,21 @@ class SellTypeAdapter extends TypeAdapter<SellType> {
         break;
       case SellType.liveKitchen:
         writer.writeByte(4);
+        break;
+      case SellType.electronics:
+        writer.writeByte(5);
+        break;
+      case SellType.electricals:
+        writer.writeByte(6);
+        break;
+      case SellType.hardware:
+        writer.writeByte(7);
+        break;
+      case SellType.automobiles:
+        writer.writeByte(8);
+        break;
+      case SellType.others:
+        writer.writeByte(9);
         break;
     }
   }

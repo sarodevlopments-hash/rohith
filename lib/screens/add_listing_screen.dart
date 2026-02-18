@@ -127,6 +127,23 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
   final Map<String, Uint8List?> colorImageBytes = {}; // Color name -> bytes (for web)
   String? defaultColorImage; // Color name that is set as default product image
 
+  // Controllers for new non-food categories
+  final brandController = TextEditingController(); // For Electronics, Electricals, Hardware, Automobiles
+  final modelNumberController = TextEditingController(); // For Electronics
+  final warrantyController = TextEditingController(); // For Electronics (optional)
+  final voltageSpecController = TextEditingController(); // For Electricals
+  final safetyDetailsController = TextEditingController(); // For Electricals
+  final materialTypeController = TextEditingController(); // For Hardware
+  final vehicleCompatibilityController = TextEditingController(); // For Automobiles
+  final customUnitTypeController = TextEditingController(); // For Others
+  final productDeclarationFileController = TextEditingController(); // For Others
+  PlatformFile? productDeclarationFile; // For Others
+  File? productDeclarationFileMobile; // For Others (mobile)
+  Uint8List? productDeclarationFileBytes; // For Others (web)
+  
+  // Unit type selection for Hardware and Automobiles
+  String? selectedUnitType; // 'pieces', 'kg', 'meters' for Hardware; 'pieces' for Automobiles
+
   bool isSubmitting = false;
   bool isFetchingLocation = false;
   bool isSearchingPlace = false;
@@ -741,6 +758,16 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                   return 'Fresh produce';
                 case SellType.clothingAndApparel:
                   return 'Apparel & accessories';
+                case SellType.electronics:
+                  return 'Electronic devices & gadgets';
+                case SellType.electricals:
+                  return 'Electrical appliances';
+                case SellType.hardware:
+                  return 'Hardware tools & materials';
+                case SellType.automobiles:
+                  return 'Auto parts & accessories';
+                case SellType.others:
+                  return 'Other products';
               }
             }
 
@@ -756,6 +783,16 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                   return Icons.checkroom_rounded;
                 case SellType.liveKitchen:
                   return Icons.local_fire_department_rounded;
+                case SellType.electronics:
+                  return Icons.devices_rounded;
+                case SellType.electricals:
+                  return Icons.electrical_services_rounded;
+                case SellType.hardware:
+                  return Icons.build_rounded;
+                case SellType.automobiles:
+                  return Icons.directions_car_rounded;
+                case SellType.others:
+                  return Icons.category_rounded;
               }
             }
 
@@ -771,6 +808,13 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                   return 'assets/images/categories/clthapp.png';
                 case SellType.liveKitchen:
                   return 'assets/images/categories/livfd.png';
+                case SellType.electronics:
+                case SellType.electricals:
+                case SellType.hardware:
+                case SellType.automobiles:
+                case SellType.others:
+                  // Use icon fallback for new categories (images can be added later)
+                  return null;
               }
             }
 
@@ -786,6 +830,16 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                   return Colors.purple;
                 case SellType.liveKitchen:
                   return Colors.red;
+                case SellType.electronics:
+                  return const Color(0xFF9B59B6); // Purple
+                case SellType.electricals:
+                  return const Color(0xFFE67E22); // Dark orange
+                case SellType.hardware:
+                  return const Color(0xFF34495E); // Dark grey-blue
+                case SellType.automobiles:
+                  return const Color(0xFFE74C3C); // Red
+                case SellType.others:
+                  return const Color(0xFF95A5A6); // Grey
               }
             }
 
@@ -952,12 +1006,16 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(ctx).size.height * 0.85,
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                     Row(
                       children: [
                         Expanded(
@@ -995,34 +1053,40 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                       ],
                     ),
                     const SizedBox(height: 14),
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        final screenWidth = MediaQuery.of(ctx).size.width;
-                        final useTwoColumns = screenWidth >= 360;
-                        final crossAxisCount = useTwoColumns ? 2 : 1;
-                        // Larger card height for image-first design (visually dominant)
-                        final cardHeight = useTwoColumns ? 180.0 : 200.0;
-                        final types = [
-                          SellType.cookedFood,
-                          SellType.groceries,
-                          SellType.vegetables,
-                          SellType.clothingAndApparel,
-                          SellType.liveKitchen,
-                        ];
+                    Flexible(
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final screenWidth = MediaQuery.of(ctx).size.width;
+                          final useTwoColumns = screenWidth >= 360;
+                          final crossAxisCount = useTwoColumns ? 2 : 1;
+                          // Larger card height for image-first design (visually dominant)
+                          final cardHeight = useTwoColumns ? 180.0 : 200.0;
+                          final types = [
+                            SellType.cookedFood,
+                            SellType.liveKitchen,
+                            SellType.groceries,
+                            SellType.clothingAndApparel,
+                            SellType.electronics,
+                            SellType.electricals,
+                            SellType.hardware,
+                            SellType.automobiles,
+                            SellType.others,
+                          ];
 
-                        return GridView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: types.length,
-                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: crossAxisCount,
-                            crossAxisSpacing: 16,
-                            mainAxisSpacing: 16,
-                            mainAxisExtent: cardHeight,
-                          ),
-                          itemBuilder: (context, index) => _typeCard(types[index]),
-                        );
-                      },
+                          return GridView.builder(
+                            shrinkWrap: true,
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            itemCount: types.length,
+                            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: crossAxisCount,
+                              crossAxisSpacing: 16,
+                              mainAxisSpacing: 16,
+                              mainAxisExtent: cardHeight,
+                            ),
+                            itemBuilder: (context, index) => _typeCard(types[index]),
+                          );
+                        },
+                      ),
                     ),
                     if (requiresFssai) ...[
                       const SizedBox(height: 14),
@@ -1102,21 +1166,15 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                                 selectedCategory = FoodCategory.veg;
                               });
                             }
-                          } else if (tempType == SellType.cookedFood || 
+                          } else if (tempType.isNonFoodCategory || 
+                                     tempType == SellType.cookedFood || 
                                      tempType == SellType.liveKitchen || 
                                      tempType == SellType.clothingAndApparel) {
                             // Check if verification is already completed
                             Navigator.of(ctx).pop(null); // Close dialog first
                             
-                            // Map SellType to SellerCategory
-                            SellerCategory? category;
-                            if (tempType == SellType.cookedFood) {
-                              category = SellerCategory.cookedFood;
-                            } else if (tempType == SellType.liveKitchen) {
-                              category = SellerCategory.liveKitchen;
-                            } else if (tempType == SellType.clothingAndApparel) {
-                              category = SellerCategory.clothesApparel;
-                            }
+                            // Map SellType to SellerCategory using the helper method
+                            final category = tempType.toSellerCategory();
                             
                             if (category != null) {
                               // Check if verification is already completed
@@ -1168,7 +1226,8 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
                         ),
                       ),
                     ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             );
@@ -2111,6 +2170,41 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
           ? packSizes.fold<int>(0, (sum, pack) => sum + pack.stock)
           : int.parse(quantityController.text);
       
+      // Build category-specific attributes map
+      Map<String, String>? categoryAttributes;
+      if (selectedType.isNonFoodCategory) {
+        final attrs = <String, String>{};
+        switch (selectedType) {
+          case SellType.electronics:
+            if (brandController.text.isNotEmpty) attrs['brand'] = brandController.text.trim();
+            if (modelNumberController.text.isNotEmpty) attrs['modelNumber'] = modelNumberController.text.trim();
+            if (warrantyController.text.isNotEmpty) attrs['warranty'] = warrantyController.text.trim();
+            break;
+          case SellType.electricals:
+            if (brandController.text.isNotEmpty) attrs['brand'] = brandController.text.trim();
+            if (voltageSpecController.text.isNotEmpty) attrs['voltageSpec'] = voltageSpecController.text.trim();
+            if (safetyDetailsController.text.isNotEmpty) attrs['safetyDetails'] = safetyDetailsController.text.trim();
+            break;
+          case SellType.hardware:
+            if (brandController.text.isNotEmpty) attrs['brand'] = brandController.text.trim();
+            if (selectedUnitType != null) attrs['unitType'] = selectedUnitType!;
+            if (materialTypeController.text.isNotEmpty) attrs['materialType'] = materialTypeController.text.trim();
+            break;
+          case SellType.automobiles:
+            if (brandController.text.isNotEmpty) attrs['brand'] = brandController.text.trim();
+            if (vehicleCompatibilityController.text.isNotEmpty) attrs['vehicleCompatibility'] = vehicleCompatibilityController.text.trim();
+            attrs['unitType'] = 'pieces'; // Always pieces for automobiles
+            break;
+          case SellType.others:
+            if (customUnitTypeController.text.isNotEmpty) attrs['unitType'] = customUnitTypeController.text.trim();
+            if (productDeclarationFileController.text.isNotEmpty) attrs['productDeclaration'] = productDeclarationFileController.text.trim();
+            break;
+          default:
+            break;
+        }
+        categoryAttributes = attrs.isNotEmpty ? attrs : null;
+      }
+      
       final listing = Listing(
         name: nameController.text.trim(),
         sellerName: sellerProfile?.sellerName ?? sellerNameController.text.trim(),
@@ -2160,6 +2254,7 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
         availableColors: selectedType == SellType.clothingAndApparel && availableColors.isNotEmpty ? availableColors : null,
         sizeColorCombinations: selectedType == SellType.clothingAndApparel && sizeColorCombinations.isNotEmpty ? sizeColorCombinations : null,
         colorImages: selectedType == SellType.clothingAndApparel && colorImagePaths.isNotEmpty ? colorImagePaths : null,
+        categoryAttributes: categoryAttributes,
       );
 
       final error = ListingValidator.validate(listing);
@@ -2543,6 +2638,400 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
         ],
       ),
     );
+  }
+
+  // Build category-specific fields for new non-food categories
+  Widget _buildCategorySpecificFields() {
+    switch (selectedType) {
+      case SellType.electronics:
+        return Column(
+          children: [
+            _buildSectionTitle("Electronics Details", icon: Icons.devices, iconColor: const Color(0xFF9B59B6)),
+            _buildCard(
+              Column(
+                children: [
+                  TextFormField(
+                    controller: brandController,
+                    decoration: InputDecoration(
+                      labelText: "Brand Name *",
+                      prefixIcon: const Icon(Icons.branding_watermark),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                    ),
+                    validator: (v) => v?.isEmpty ?? true ? "Required" : null,
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: modelNumberController,
+                    decoration: InputDecoration(
+                      labelText: "Model Number *",
+                      prefixIcon: const Icon(Icons.numbers),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                    ),
+                    validator: (v) => v?.isEmpty ?? true ? "Required" : null,
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: warrantyController,
+                    decoration: InputDecoration(
+                      labelText: "Warranty (Optional)",
+                      prefixIcon: const Icon(Icons.verified_user),
+                      hintText: "E.g., 1 year, 6 months",
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: quantityController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: "Quantity (Pieces) *",
+                      prefixIcon: const Icon(Icons.inventory_2),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                    ),
+                    validator: (v) => v?.isEmpty ?? true ? "Required" : null,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+
+      case SellType.electricals:
+        return Column(
+          children: [
+            _buildSectionTitle("Electricals Details", icon: Icons.electrical_services, iconColor: const Color(0xFFE67E22)),
+            _buildCard(
+              Column(
+                children: [
+                  TextFormField(
+                    controller: brandController,
+                    decoration: InputDecoration(
+                      labelText: "Brand *",
+                      prefixIcon: const Icon(Icons.branding_watermark),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                    ),
+                    validator: (v) => v?.isEmpty ?? true ? "Required" : null,
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: voltageSpecController,
+                    decoration: InputDecoration(
+                      labelText: "Voltage / Specification *",
+                      prefixIcon: const Icon(Icons.power),
+                      hintText: "E.g., 220V, 5A, etc.",
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                    ),
+                    validator: (v) => v?.isEmpty ?? true ? "Required" : null,
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: safetyDetailsController,
+                    maxLines: 3,
+                    decoration: InputDecoration(
+                      labelText: "Safety Details",
+                      prefixIcon: const Icon(Icons.security),
+                      hintText: "Safety certifications, compliance details...",
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: quantityController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: "Quantity (Pieces) *",
+                      prefixIcon: const Icon(Icons.inventory_2),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                    ),
+                    validator: (v) => v?.isEmpty ?? true ? "Required" : null,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+
+      case SellType.hardware:
+        return Column(
+          children: [
+            _buildSectionTitle("Hardware Details", icon: Icons.build, iconColor: const Color(0xFF34495E)),
+            _buildCard(
+              Column(
+                children: [
+                  TextFormField(
+                    controller: brandController,
+                    decoration: InputDecoration(
+                      labelText: "Brand *",
+                      prefixIcon: const Icon(Icons.branding_watermark),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                    ),
+                    validator: (v) => v?.isEmpty ?? true ? "Required" : null,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    "Unit Type *",
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: ['pieces', 'kg', 'meters'].map((unit) {
+                      final isSelected = selectedUnitType == unit;
+                      return Expanded(
+                        child: Padding(
+                          padding: EdgeInsets.only(right: unit != 'meters' ? 8 : 0),
+                          child: GestureDetector(
+                            onTap: () => setState(() => selectedUnitType = unit),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              decoration: BoxDecoration(
+                                color: isSelected ? AppTheme.primaryColor : Colors.grey.shade50,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: isSelected ? AppTheme.primaryColor : Colors.grey.shade300,
+                                  width: isSelected ? 2 : 1,
+                                ),
+                              ),
+                              child: Text(
+                                unit.toUpperCase(),
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: isSelected ? Colors.white : Colors.grey.shade700,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: materialTypeController,
+                    decoration: InputDecoration(
+                      labelText: "Material Type",
+                      prefixIcon: const Icon(Icons.category),
+                      hintText: "E.g., Steel, Plastic, Wood",
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: quantityController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: "Stock Quantity *",
+                      prefixIcon: const Icon(Icons.inventory_2),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                    ),
+                    validator: (v) => v?.isEmpty ?? true ? "Required" : null,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+
+      case SellType.automobiles:
+        return Column(
+          children: [
+            _buildSectionTitle("Automobile Details", icon: Icons.directions_car, iconColor: const Color(0xFFE74C3C)),
+            _buildCard(
+              Column(
+                children: [
+                  TextFormField(
+                    controller: brandController,
+                    decoration: InputDecoration(
+                      labelText: "Brand *",
+                      prefixIcon: const Icon(Icons.branding_watermark),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                    ),
+                    validator: (v) => v?.isEmpty ?? true ? "Required" : null,
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: vehicleCompatibilityController,
+                    decoration: InputDecoration(
+                      labelText: "Vehicle Compatibility *",
+                      prefixIcon: const Icon(Icons.directions_car),
+                      hintText: "E.g., Maruti Swift, Honda City, etc.",
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                    ),
+                    validator: (v) => v?.isEmpty ?? true ? "Required" : null,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    "Unit Type *",
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryColor,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Text(
+                      "PIECES",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: quantityController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: "Quantity (Pieces) *",
+                      prefixIcon: const Icon(Icons.inventory_2),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                    ),
+                    validator: (v) => v?.isEmpty ?? true ? "Required" : null,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+
+      case SellType.others:
+        return Column(
+          children: [
+            _buildSectionTitle("Product Details", icon: Icons.category, iconColor: const Color(0xFF95A5A6)),
+            _buildCard(
+              Column(
+                children: [
+                  TextFormField(
+                    controller: customUnitTypeController,
+                    decoration: InputDecoration(
+                      labelText: "Custom Unit Type *",
+                      prefixIcon: const Icon(Icons.straighten),
+                      hintText: "E.g., Box, Set, Pair, etc.",
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                    ),
+                    validator: (v) => v?.isEmpty ?? true ? "Required" : null,
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: quantityController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: "Quantity *",
+                      prefixIcon: const Icon(Icons.inventory_2),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                    ),
+                    validator: (v) => v?.isEmpty ?? true ? "Required" : null,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    "Product Declaration Upload *",
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+                  ),
+                  const SizedBox(height: 8),
+                  GestureDetector(
+                    onTap: () async {
+                      // File picker for product declaration
+                      final result = await FilePicker.platform.pickFiles(
+                        type: FileType.any,
+                        allowMultiple: false,
+                      );
+                      if (result != null && result.files.single.path != null) {
+                        setState(() {
+                          if (kIsWeb) {
+                            productDeclarationFileBytes = result.files.single.bytes;
+                            productDeclarationFileController.text = result.files.single.name;
+                          } else {
+                            productDeclarationFileMobile = File(result.files.single.path!);
+                            productDeclarationFileController.text = result.files.single.name;
+                          }
+                        });
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.upload_file, color: Colors.grey),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              productDeclarationFileController.text.isEmpty
+                                  ? "Upload Product Declaration"
+                                  : productDeclarationFileController.text,
+                              style: TextStyle(
+                                color: productDeclarationFileController.text.isEmpty
+                                    ? Colors.grey.shade600
+                                    : Colors.black87,
+                              ),
+                            ),
+                          ),
+                          if (productDeclarationFileController.text.isNotEmpty)
+                            IconButton(
+                              icon: const Icon(Icons.close, size: 20),
+                              onPressed: () {
+                                setState(() {
+                                  productDeclarationFileController.clear();
+                                  productDeclarationFileMobile = null;
+                                  productDeclarationFileBytes = null;
+                                });
+                              },
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+
+      default:
+        return const SizedBox.shrink();
+    }
   }
 
   Widget _buildCard(Widget child, {Color? backgroundColor}) {
@@ -6084,6 +6573,11 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
               ),
             ],
 
+            // Category-specific fields for new non-food categories
+            if (selectedType.isNonFoodCategory) ...[
+              _buildCategorySpecificFields(),
+            ],
+
             // Product Description
             _buildSectionTitle("Product Description", icon: Icons.description, iconColor: Colors.blue),
             _buildCard(
@@ -7270,14 +7764,8 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
 
     // Validate verification for pending items that require verification
     for (final item in pendingItems) {
-      SellerCategory? category;
-      if (item.type == SellType.cookedFood) {
-        category = SellerCategory.cookedFood;
-      } else if (item.type == SellType.liveKitchen) {
-        category = SellerCategory.liveKitchen;
-      } else if (item.type == SellType.clothingAndApparel) {
-        category = SellerCategory.clothesApparel;
-      }
+      // Use the helper method to convert SellType to SellerCategory
+      final category = item.type.toSellerCategory();
 
       if (category != null) {
         final isVerified = await SellerVerificationStorage.isVerificationCompleted(category);

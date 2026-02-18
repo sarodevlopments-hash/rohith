@@ -4,6 +4,11 @@ enum SellerCategory {
   cookedFood,
   liveKitchen,
   clothesApparel,
+  electronics,
+  electricals,
+  hardware,
+  automobiles,
+  others,
 }
 
 extension SellerCategoryExtension on SellerCategory {
@@ -15,6 +20,16 @@ extension SellerCategoryExtension on SellerCategory {
         return 'Live Kitchen';
       case SellerCategory.clothesApparel:
         return 'Clothes & Apparel';
+      case SellerCategory.electronics:
+        return 'Electronics';
+      case SellerCategory.electricals:
+        return 'Electricals';
+      case SellerCategory.hardware:
+        return 'Hardware';
+      case SellerCategory.automobiles:
+        return 'Automobiles';
+      case SellerCategory.others:
+        return 'Others';
     }
   }
 
@@ -26,6 +41,16 @@ extension SellerCategoryExtension on SellerCategory {
         return 'Cook on demand - real-time orders';
       case SellerCategory.clothesApparel:
         return 'Clothing and apparel items';
+      case SellerCategory.electronics:
+        return 'Electronic devices and gadgets';
+      case SellerCategory.electricals:
+        return 'Electrical appliances and equipment';
+      case SellerCategory.hardware:
+        return 'Hardware tools and materials';
+      case SellerCategory.automobiles:
+        return 'Automobile parts and accessories';
+      case SellerCategory.others:
+        return 'Other products and items';
     }
   }
 
@@ -37,6 +62,16 @@ extension SellerCategoryExtension on SellerCategory {
         return Icons.kitchen;
       case SellerCategory.clothesApparel:
         return Icons.checkroom;
+      case SellerCategory.electronics:
+        return Icons.devices;
+      case SellerCategory.electricals:
+        return Icons.electrical_services;
+      case SellerCategory.hardware:
+        return Icons.build;
+      case SellerCategory.automobiles:
+        return Icons.directions_car;
+      case SellerCategory.others:
+        return Icons.category;
     }
   }
 
@@ -48,6 +83,16 @@ extension SellerCategoryExtension on SellerCategory {
         return const Color(0xFFFFB703); // Orange
       case SellerCategory.clothesApparel:
         return const Color(0xFF6FA8FF); // Soft blue
+      case SellerCategory.electronics:
+        return const Color(0xFF9B59B6); // Purple
+      case SellerCategory.electricals:
+        return const Color(0xFFE67E22); // Dark orange
+      case SellerCategory.hardware:
+        return const Color(0xFF34495E); // Dark grey-blue
+      case SellerCategory.automobiles:
+        return const Color(0xFFE74C3C); // Red
+      case SellerCategory.others:
+        return const Color(0xFF95A5A6); // Grey
     }
   }
 }

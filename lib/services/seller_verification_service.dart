@@ -22,6 +22,32 @@ class SellerVerificationService {
           'PAN Card',
           'Aadhaar Card',
         ];
+      case SellerCategory.electronics:
+        return [
+          'ID Proof',
+          'Address Proof',
+        ];
+      case SellerCategory.electricals:
+        return [
+          'PAN Card',
+          'Aadhaar Card',
+        ];
+      case SellerCategory.hardware:
+        return [
+          'PAN Card',
+          'Aadhaar Card',
+        ];
+      case SellerCategory.automobiles:
+        return [
+          'PAN Card',
+          'Aadhaar Card',
+        ];
+      case SellerCategory.others:
+        return [
+          'PAN Card',
+          'Aadhaar Card',
+          'Product Declaration',
+        ];
     }
   }
 
@@ -41,6 +67,24 @@ class SellerVerificationService {
           'GST Certificate (if applicable)',
           'Shop Establishment License',
         ];
+      case SellerCategory.electronics:
+        return [
+          'Compliance Declaration',
+        ];
+      case SellerCategory.electricals:
+        return [
+          'Safety Compliance',
+        ];
+      case SellerCategory.hardware:
+        return [
+          'Trade License',
+        ];
+      case SellerCategory.automobiles:
+        return [
+          'Product Authenticity Declaration',
+        ];
+      case SellerCategory.others:
+        return [];
     }
   }
 
