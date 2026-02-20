@@ -2381,7 +2381,19 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
           final tempListingId = DateTime.now().millisecondsSinceEpoch.toString();
 
           // Upload main product image
-          if (productImagePath != null && ImageStorageService.isLocalPath(productImagePath)) {
+          print('🖼️ Checking product image upload...');
+          print('   Product image path: $productImagePath');
+          print('   Product image bytes: ${productImageBytes != null ? "${productImageBytes!.length} bytes" : "null"}');
+          print('   Is local path: ${productImagePath != null ? ImageStorageService.isLocalPath(productImagePath) : false}');
+          print('   Is storage URL: ${productImagePath != null ? ImageStorageService.isStorageUrl(productImagePath) : false}');
+          
+          // For web: need path AND bytes. For mobile: just need path
+          final bool shouldUpload = productImagePath != null && 
+              ImageStorageService.isLocalPath(productImagePath) &&
+              (kIsWeb ? productImageBytes != null : true);
+          
+          if (shouldUpload) {
+            print('📤 Starting image upload to S3...');
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
@@ -2398,7 +2410,13 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
               listingId: tempListingId,
             );
 
+            print('📥 Upload result: ${uploadedImageUrl != null ? "SUCCESS" : "FAILED"}');
+            if (uploadedImageUrl != null) {
+              print('   Uploaded URL: $uploadedImageUrl');
+            }
+
             if (uploadedImageUrl == null) {
+              print('❌ Image upload failed - stopping submission');
               setState(() => isSubmitting = false);
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -2412,7 +2430,10 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
             }
           } else if (productImagePath != null && ImageStorageService.isStorageUrl(productImagePath)) {
             // Already a Storage URL (editing existing listing)
+            print('✅ Image already has storage URL, skipping upload');
             uploadedImageUrl = productImagePath;
+          } else {
+            print('⚠️ No product image to upload or invalid path');
           }
 
           // Upload color images for clothing
@@ -2498,13 +2519,22 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
           await ScheduledListingService.addScheduledListing(scheduledListing);
         } else {
           // Post immediately
-          await box.add(listingWithStorageUrls);
-          // ✅ Sync to Firestore for cloud persistence (non-blocking)
-          // Don't await - let it run in background so it doesn't block UI
-          ListingFirestoreService.upsertListing(listingWithStorageUrls).catchError((e) {
-            print('⚠️ Firestore sync failed (listing saved locally): $e');
-            // Don't show error to user - listing is already saved locally
-          });
+          final addedKey = await box.add(listingWithStorageUrls);
+          print('✅ Listing saved to Hive with key: $addedKey');
+          
+          // ✅ Get the listing with the correct key and sync to Firestore
+          final listingWithKey = box.get(addedKey);
+          if (listingWithKey != null) {
+            // Sync to Firestore (non-blocking but with better error handling)
+            ListingFirestoreService.upsertListing(listingWithKey).then((_) {
+              print('✅ Listing successfully synced to Firestore: $addedKey');
+            }).catchError((e) {
+              print('❌ Firestore sync failed for listing $addedKey: $e');
+              print('   Listing is saved locally but may not appear on other devices');
+            });
+          } else {
+            print('⚠️ Warning: Could not retrieve listing from Hive after adding (key: $addedKey)');
+          }
         }
 
         setState(() {
@@ -7950,13 +7980,22 @@ class _AddListingScreenState extends State<AddListingScreen> with TickerProvider
             colorImages: listing.colorImages,
           );
 
-          await box.add(listingWithStorageUrl);
-          // ✅ Sync to Firestore for cloud persistence (non-blocking)
-          // Don't await - let it run in background so it doesn't block UI
-          ListingFirestoreService.upsertListing(listingWithStorageUrl).catchError((e) {
-            print('⚠️ Firestore sync failed (listing saved locally): $e');
-            // Don't show error to user - listing is already saved locally
-          });
+          final addedKey = await box.add(listingWithStorageUrl);
+          print('✅ Listing saved to Hive with key: $addedKey');
+          
+          // ✅ Get the listing with the correct key and sync to Firestore
+          final listingWithKey = box.get(addedKey);
+          if (listingWithKey != null) {
+            // Sync to Firestore (non-blocking but with better error handling)
+            ListingFirestoreService.upsertListing(listingWithKey).then((_) {
+              print('✅ Listing successfully synced to Firestore: $addedKey');
+            }).catchError((e) {
+              print('❌ Firestore sync failed for listing $addedKey: $e');
+              print('   Listing is saved locally but may not appear on other devices');
+            });
+          } else {
+            print('⚠️ Warning: Could not retrieve listing from Hive after adding (key: $addedKey)');
+          }
         }
 
         // Success message will be shown after navigation delay

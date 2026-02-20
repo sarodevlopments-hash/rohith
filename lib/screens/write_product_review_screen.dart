@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../models/order.dart';
 import '../models/listing.dart';
 import '../services/product_review_service.dart';
 import '../widgets/star_rating_widget.dart';
 import '../theme/app_theme.dart';
+import '../services/image_storage_service.dart';
 
 class WriteProductReviewScreen extends StatefulWidget {
   final Order order;
@@ -164,23 +166,49 @@ class _WriteProductReviewScreenState extends State<WriteProductReviewScreen> {
                 padding: const EdgeInsets.all(16),
                 child: Row(
                   children: [
-                    if (widget.listing.imagePath != null)
+                    if (widget.listing.imagePath != null && widget.listing.imagePath!.isNotEmpty)
                       ClipRRect(
                         borderRadius: BorderRadius.circular(8),
-                        child: Image.network(
-                          widget.listing.imagePath!,
-                          width: 60,
-                          height: 60,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              width: 60,
-                              height: 60,
-                              color: Colors.grey.shade200,
-                              child: const Icon(Icons.image),
-                            );
-                          },
-                        ),
+                        child: ImageStorageService.isStorageUrl(widget.listing.imagePath!)
+                            ? CachedNetworkImage(
+                                imageUrl: widget.listing.imagePath!,
+                                width: 60,
+                                height: 60,
+                                fit: BoxFit.cover,
+                                placeholder: (context, url) => Center(
+                                  child: SizedBox(
+                                    height: 15,
+                                    width: 15,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  ),
+                                ),
+                                errorWidget: (context, url, error) => Container(
+                                  width: 60,
+                                  height: 60,
+                                  color: Colors.grey.shade200,
+                                  child: const Icon(Icons.image, color: Colors.grey),
+                                ),
+                              )
+                            : (kIsWeb
+                                ? Container(
+                                    width: 60,
+                                    height: 60,
+                                    color: Colors.grey.shade200,
+                                    child: const Icon(Icons.image, color: Colors.grey),
+                                  )
+                                : File(widget.listing.imagePath!).existsSync()
+                                    ? Image.file(
+                                        File(widget.listing.imagePath!),
+                                        width: 60,
+                                        height: 60,
+                                        fit: BoxFit.cover,
+                                      )
+                                    : Container(
+                                        width: 60,
+                                        height: 60,
+                                        color: Colors.grey.shade200,
+                                        child: const Icon(Icons.image, color: Colors.grey),
+                                      )),
                       )
                     else
                       Container(

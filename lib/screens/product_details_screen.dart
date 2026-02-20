@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:ui';
 import 'package:hive/hive.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../models/listing.dart';
 import '../models/food_category.dart';
 import '../models/measurement_unit.dart';
@@ -343,28 +344,23 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                           height: 350,
                           width: double.infinity,
                           color: Colors.grey.shade200,
-                          child: imagePath != null
+                          child: imagePath != null && imagePath.isNotEmpty
                               ? (ImageStorageService.isStorageUrl(imagePath)
-                                  // Firebase Storage URL - display directly
-                                  ? Image.network(
-                                      imagePath,
+                                  // Firebase Storage URL - use CachedNetworkImage
+                                  ? CachedNetworkImage(
+                                      imageUrl: imagePath,
                                       fit: BoxFit.cover,
-                                      loadingBuilder: (context, child, loadingProgress) {
-                                        if (loadingProgress == null) return child;
-                                        return Center(
-                                          child: CircularProgressIndicator(
-                                            value: loadingProgress.expectedTotalBytes != null
-                                                ? loadingProgress.cumulativeBytesLoaded /
-                                                    loadingProgress.expectedTotalBytes!
-                                                : null,
-                                          ),
-                                        );
-                                      },
-                                      errorBuilder: (context, error, stackTrace) {
-                                        return const Center(
-                                          child: Icon(Icons.image_not_supported, size: 64),
-                                        );
-                                      },
+                                      placeholder: (context, url) => Center(
+                                        child: SizedBox(
+                                          height: 20,
+                                          width: 20,
+                                          child: CircularProgressIndicator(strokeWidth: 2),
+                                        ),
+                                      ),
+                                      errorWidget: (context, url, error) => Container(
+                                        color: Colors.grey[200],
+                                        child: const Icon(Icons.image_not_supported, color: Colors.grey, size: 64),
+                                      ),
                                     )
                                   // Local file path - only load on mobile, show placeholder on web
                                   : (kIsWeb

@@ -1,0 +1,69 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [ main, autotest, develop ]
+  pull_request:
+    branches: [ main, autotest, develop ]
+  workflow_dispatch:
+
+jobs:
+  integration-tests:
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Verify Flutter installation
+        run: flutter doctor -v
+
+      - name: Create Android emulator
+        run: |
+          echo "y" | sdkmanager "system-images;android-33;google_apis;x86_64"
+          echo "no" | avdmanager create avd -n test_emulator -k "system-images;android-33;google_apis;x86_64" -d "pixel_5"
+          emulator -avd test_emulator -no-window -no-audio &
+          adb wait-for-device shell 'while [[ -z $(getprop sys.boot_completed | tr -d '\r') ]]; do sleep 1; done'
+          adb shell input keyevent 82
+
+      - name: Run integration tests
+        run: |
+          flutter test integration_test/ --reporter expanded
+        env:
+          FLUTTER_TEST_TIMEOUT: 300
+
+      - name: Generate test report
+        if: always()
+        run: |
+          mkdir -p test_reports
+          flutter test integration_test/ --reporter json > test_reports/test_results.json || true
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: test_reports/
+          retention-days: 30
+
+      - name: Cleanup emulator
+        if: always()
+        run: |
+          adb emu kill || true
+

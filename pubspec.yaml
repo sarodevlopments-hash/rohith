@@ -56,15 +56,20 @@ dependencies:
   fl_chart: ^0.68.0
   http: ^1.1.0
   google_maps_flutter: ^2.5.0
+  cached_network_image: ^3.3.0
+  crypto: ^3.0.3
 
   
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  integration_test:
+    sdk: flutter
   hive_generator: ^2.0.1
   build_runner: ^2.4.6  
   flutter_lints: ^6.0.0
+  patrol: ^3.0.0  # Advanced E2E testing with better finders
   
 
   # The "flutter_lints" package below contains a set of recommended lints to

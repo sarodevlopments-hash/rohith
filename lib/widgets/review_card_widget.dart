@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../models/product_review.dart';
 import '../models/seller_review.dart';
 import 'star_rating_widget.dart';
@@ -55,21 +56,26 @@ class ProductReviewCard extends StatelessWidget {
               const SizedBox(height: 8),
             ],
             // Review image
-            if (review.imageUrl != null) ...[
+            if (review.imageUrl != null && review.imageUrl!.isNotEmpty) ...[
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                child: Image.network(
-                  review.imageUrl!,
+                child: CachedNetworkImage(
+                  imageUrl: review.imageUrl!,
                   width: double.infinity,
                   height: 200,
                   fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      height: 200,
-                      color: Colors.grey.shade200,
-                      child: const Icon(Icons.broken_image),
-                    );
-                  },
+                  placeholder: (context, url) => Center(
+                    child: SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                  errorWidget: (context, url, error) => Container(
+                    height: 200,
+                    color: Colors.grey.shade200,
+                    child: const Icon(Icons.broken_image, color: Colors.grey),
+                  ),
                 ),
               ),
               const SizedBox(height: 8),

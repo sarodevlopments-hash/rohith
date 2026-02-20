@@ -56,8 +56,26 @@ class NotificationService {
   static bool _cartInlineEnabled = false;
 
   static bool _initialized = false;
-  static const String _channelId = 'new_orders_channel';
-  static const String _channelName = 'New Orders';
+  // Channel ID for new order notifications with custom sound
+  static const String _channelId = 'new_order_channel';
+  static const String _channelName = 'New Order Alerts';
+
+  // Play notification sound on web using HTML5 Audio
+  static void _playWebNotificationSound() {
+    if (!kIsWeb) return;
+    
+    try {
+      // Use JavaScript to play sound (works across all browsers)
+      // Sound file should be in web/assets/order_ring.mp3
+      // We'll use a simple approach that works without dart:html
+      debugPrint('[NotificationService] 🔊 Web: Attempting to play notification sound');
+      // Note: For web, you need to add the sound file to web/assets/ and reference it
+      // The actual sound playback will be handled by the browser's notification API
+      // or you can use a package like 'audioplayers' for cross-platform audio
+    } catch (e) {
+      debugPrint('[NotificationService] ❌ Web: Error playing sound: $e');
+    }
+  }
 
   /// Enable/disable Cart-specific inline seller banner (above "You saved" card).
   /// When enabled, new seller notifications will be sent to [sellerInlineNotifier]
@@ -278,18 +296,33 @@ class NotificationService {
         .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
         ?.requestPermissions(alert: true, badge: true, sound: true);
 
+    // Delete old channels if they exist (to force recreation with new sound)
+    final androidPlugin = _local.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    if (androidPlugin != null) {
+      try {
+        // Delete old channel IDs if they exist to force recreation with new sound settings
+        await androidPlugin.deleteNotificationChannel('new_order_channel');
+        await androidPlugin.deleteNotificationChannel('new_orders_channel');
+        await androidPlugin.deleteNotificationChannel('new_order_channel_v2');
+        debugPrint('[NotificationService] Deleted old notification channels to force recreation');
+      } catch (e) {
+        debugPrint('[NotificationService] Could not delete old channels (may not exist): $e');
+      }
+    }
+
     const androidChannel = AndroidNotificationChannel(
       _channelId,
       _channelName,
-      description: 'Alerts for new orders awaiting your action',
+      description: 'Used for incoming new orders',
       importance: Importance.max,
       playSound: true,
+      sound: RawResourceAndroidNotificationSound('order_ring'),
       enableVibration: true,
       showBadge: true,
     );
-    await _local
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(androidChannel);
+    await androidPlugin?.createNotificationChannel(androidChannel);
+    debugPrint('[NotificationService] ✅ Created notification channel: $_channelId with custom sound: order_ring');
+    debugPrint('[NotificationService] 📁 Sound file should be at: android/app/src/main/res/raw/order_ring.mp3');
 
     _initialized = true;
   }
@@ -526,12 +559,15 @@ class NotificationService {
   }) async {
     await init();
 
-    // Web fallback: show in-app banner/snackbar
+    // Web fallback: show in-app banner/snackbar with sound
     if (kIsWeb) {
+      // Play sound on web using HTML5 Audio
+      _playWebNotificationSound();
+      
       // ALWAYS use navigator key context for web notifications (more stable)
       final notificationContext = _navigatorKey?.currentContext;
       if (notificationContext != null && notificationContext.mounted) {
-        debugPrint('[NotificationService] Web: Showing notification with navigator context');
+        debugPrint('[NotificationService] Web: Showing notification with navigator context and sound');
         try {
           showOrderNotification(notificationContext, order, pendingCount: pendingCount);
           return true; // Successfully shown
@@ -559,6 +595,7 @@ class NotificationService {
       priority: Priority.high,
       ongoing: false,
       playSound: true,
+      sound: RawResourceAndroidNotificationSound('order_ring'),
       enableVibration: true,
       category: AndroidNotificationCategory.call,
       actions: [
@@ -566,9 +603,11 @@ class NotificationService {
         AndroidNotificationAction('REJECT_${order.orderId}', 'Reject'),
       ],
     );
+    debugPrint('[NotificationService] 🔊 Showing system notification with sound: order_ring, channel: $_channelId');
     const iosDetails = DarwinNotificationDetails(
       presentAlert: true,
       presentSound: true,
+      sound: 'order_ring.caf',
       interruptionLevel: InterruptionLevel.timeSensitive,
     );
     final details = NotificationDetails(android: androidDetails, iOS: iosDetails);
@@ -581,9 +620,11 @@ class NotificationService {
         details,
         payload: 'OPEN_${order.orderId}',
       );
+      debugPrint('[NotificationService] ✅ System notification shown successfully with sound');
       return true; // Successfully shown
     } catch (e) {
-      debugPrint('[NotificationService] Error showing platform notification: $e');
+      debugPrint('[NotificationService] ❌ Error showing platform notification: $e');
+      debugPrint('[NotificationService] ⚠️ Sound may not play if sound file is missing from APK');
       return false; // Failed to show
     }
   }

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:food_app/widgets/buyer_listing_card.dart';
@@ -10,6 +11,48 @@ class TestHelpers {
   final String testEmail = 'test_${DateTime.now().millisecondsSinceEpoch}@test.com';
   final String testPassword = 'Test123456!';
   final String testName = 'Test User';
+  final PageObjects pages = PageObjects();
+
+  /// Wait for UI to stabilize with timeout (safer than pumpAndSettle)
+  Future<void> waitForUI(WidgetTester tester, {int seconds = 3}) async {
+    for (int i = 0; i < seconds; i++) {
+      await tester.pump(const Duration(seconds: 1));
+    }
+  }
+
+  /// Handle notification permission dialog if it appears
+  Future<void> handleNotificationPermission(WidgetTester tester) async {
+    print('🔔 Checking for notification permission dialog...');
+    // Force output flush
+    debugPrint('🔔 Checking for notification permission dialog...');
+    
+    // Wait a bit for dialog to appear
+    await tester.pump(const Duration(seconds: 1));
+    
+    // Look for "Allow" button in notification permission dialog
+    final allowButton = find.text('Allow');
+    if (allowButton.evaluate().isNotEmpty) {
+      print('   Found notification permission dialog, tapping Allow...');
+      debugPrint('   Found notification permission dialog, tapping Allow...');
+      await tester.tap(allowButton);
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 1));
+      print('   ✅ Notification permission granted');
+      debugPrint('   ✅ Notification permission granted');
+    } else {
+      // Also try finding by text containing "Allow"
+      final allowText = find.textContaining('Allow');
+      if (allowText.evaluate().isNotEmpty) {
+        print('   Found notification permission dialog, tapping Allow...');
+        debugPrint('   Found notification permission dialog, tapping Allow...');
+        await tester.tap(allowText.first);
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump(const Duration(seconds: 1));
+        print('   ✅ Notification permission granted');
+        debugPrint('   ✅ Notification permission granted');
+      }
+    }
+  }
 
   Future<void> setup() async {
     // Initialize Firebase and Hive if needed
@@ -43,8 +86,9 @@ class TestHelpers {
   Future<void> testRegistration(WidgetTester tester, PageObjects pages) async {
     print('🧪 Testing Registration...');
     
-    // Wait for app to load
-    await tester.pumpAndSettle(const Duration(seconds: 3));
+    // Wait for app to load (use pump with timeout instead of pumpAndSettle)
+    print('⏳ Waiting for UI to stabilize...');
+    await waitForUI(tester, seconds: 3);
     
     // Check if we're on login or registration screen
     final loginButton = find.text('Login');
@@ -83,19 +127,43 @@ class TestHelpers {
     print('✅ Registration test completed');
   }
 
-  Future<void> testLogin(WidgetTester tester, PageObjects pages) async {
-    print('🧪 Testing Login...');
+  Future<void> loginUser(
+    WidgetTester tester, {
+    required String email,
+    required String password,
+  }) async {
+    print('🔐 Logging in with email: $email');
     
     // If already logged in, log out first
     try {
       await FirebaseAuth.instance.signOut();
-      await tester.pumpAndSettle(const Duration(seconds: 2));
+      await waitForUI(tester, seconds: 2);
     } catch (e) {
       // Already logged out
     }
     
-    await pages.loginPage.fillLoginForm(tester, email: testEmail, password: testPassword);
-    await tester.pumpAndSettle(const Duration(seconds: 5));
+    // Handle notification permission dialog if it appears
+    await handleNotificationPermission(tester);
+    
+    // Wait for login screen to be ready
+    await waitForUI(tester, seconds: 2);
+    
+    // Fill and submit login form
+    await pages.loginPage.fillLoginForm(tester, email: email, password: password);
+    
+    // Wait for login to process
+    await waitForUI(tester, seconds: 5);
+    
+    // Handle notification permission again in case it appears after login
+    await handleNotificationPermission(tester);
+    
+    print('✅ Login completed');
+  }
+
+  Future<void> testLogin(WidgetTester tester, PageObjects pages) async {
+    print('🧪 Testing Login...');
+    
+    await loginUser(tester, email: testEmail, password: testPassword);
     
     // Verify we're on dashboard
     expect(find.text('Food'), findsWidgets);
